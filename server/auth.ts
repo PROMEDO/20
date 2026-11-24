@@ -21,7 +21,6 @@ export const AUTH_COOKIE_NAME = 'mp_sid';
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export type HierarchicalStaffPermissions = {
-  canViewAnalytics: boolean;
   canViewHome: boolean;
   canManageRestaurants: boolean;
   canCreatePartner: boolean;
@@ -240,7 +239,6 @@ export function extractRequestSid(req: Request): string | null {
 }
 
 export const FULL_OWNER_PERMISSIONS: HierarchicalStaffPermissions = {
-  canViewAnalytics: true,
   canViewHome: true,
   canManageRestaurants: true,
   canCreatePartner: true,
@@ -275,8 +273,7 @@ export function normalizeHierarchicalPermissions(raw: unknown): HierarchicalStaf
       : Boolean(src.canManagePlans);
 
   return {
-    canViewAnalytics: Boolean(src.canViewAnalytics),
-    canViewHome: src.canViewHome !== undefined ? Boolean(src.canViewHome) : Boolean(src.canViewAnalytics ?? true),
+    canViewHome: src.canViewHome !== undefined ? Boolean(src.canViewHome) : true,
     canManageRestaurants,
     canCreatePartner: src.canCreatePartner !== undefined ? Boolean(src.canCreatePartner) : canManageRestaurants,
     canEditPartnerPlan: Boolean(src.canEditPartnerPlan || src.canExtendSubscription),

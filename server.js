@@ -3,8 +3,8 @@ import "dotenv/config";
 import crypto7 from "node:crypto";
 import express2 from "express";
 import compression from "compression";
-import fs7 from "node:fs";
-import path7 from "node:path";
+import fs8 from "node:fs";
+import path8 from "node:path";
 import { fileURLToPath } from "node:url";
 
 // server/neon-store.ts
@@ -4626,7 +4626,6 @@ function extractRequestSid(req) {
   return verifySignedSid(rawCookie);
 }
 var FULL_OWNER_PERMISSIONS = {
-  canViewAnalytics: true,
   canViewHome: true,
   canManageRestaurants: true,
   canCreatePartner: true,
@@ -4654,8 +4653,7 @@ function normalizeHierarchicalPermissions(raw) {
   const canManageRestaurants = Boolean(src.canManageRestaurants || src.canManageUsers);
   const canManageSettings = src.canManageSettings !== void 0 ? Boolean(src.canManageSettings) : Boolean(src.canManagePlans);
   return {
-    canViewAnalytics: Boolean(src.canViewAnalytics),
-    canViewHome: src.canViewHome !== void 0 ? Boolean(src.canViewHome) : Boolean(src.canViewAnalytics ?? true),
+    canViewHome: src.canViewHome !== void 0 ? Boolean(src.canViewHome) : true,
     canManageRestaurants,
     canCreatePartner: src.canCreatePartner !== void 0 ? Boolean(src.canCreatePartner) : canManageRestaurants,
     canEditPartnerPlan: Boolean(src.canEditPartnerPlan || src.canExtendSubscription),
@@ -4856,6 +4854,8 @@ function matchesPhoneCandidates(a, b) {
 
 // server/admin-routes.ts
 import crypto3 from "node:crypto";
+import fs5 from "node:fs";
+import path5 from "node:path";
 import { Router } from "express";
 
 // server/subdomain.ts
@@ -6766,6 +6766,62 @@ function createAdminRouter() {
       return res.status(500).json({ success: false, error: msg });
     }
   });
+  function collectStaticAppAssetReferences(rootDir) {
+    const chunks = [];
+    const readIfExists = (targetPath) => {
+      try {
+        if (fs5.existsSync(targetPath) && fs5.statSync(targetPath).isFile()) {
+          chunks.push(fs5.readFileSync(targetPath, "utf8"));
+        }
+      } catch {
+      }
+    };
+    const walkCodeDir = (dirPath) => {
+      if (!fs5.existsSync(dirPath)) return;
+      for (const entry of fs5.readdirSync(dirPath, { withFileTypes: true })) {
+        const full = path5.join(dirPath, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name === "node_modules" || entry.name === "dist") continue;
+          walkCodeDir(full);
+        } else if (/\.(ts|tsx|js|jsx|css|html|json|webmanifest)$/i.test(entry.name)) {
+          readIfExists(full);
+        }
+      }
+    };
+    readIfExists(path5.join(rootDir, "index.html"));
+    readIfExists(path5.join(rootDir, "server.ts"));
+    readIfExists(path5.join(rootDir, "public", "sw.js"));
+    readIfExists(path5.join(rootDir, "public", "manifest.webmanifest"));
+    walkCodeDir(path5.join(rootDir, "src"));
+    walkCodeDir(path5.join(rootDir, "server"));
+    return chunks.join("\n");
+  }
+  function walkDirFiles(baseDir, currentDir, out) {
+    if (!fs5.existsSync(currentDir)) return;
+    for (const entry of fs5.readdirSync(currentDir, { withFileTypes: true })) {
+      const resolved = path5.resolve(currentDir, entry.name);
+      if (!resolved.startsWith(baseDir + path5.sep)) continue;
+      if (entry.isDirectory()) {
+        walkDirFiles(baseDir, resolved, out);
+      } else if (entry.isFile()) {
+        const stat = fs5.statSync(resolved);
+        const relPosix = path5.relative(baseDir, resolved).split(path5.sep).join("/");
+        out.push({ absPath: resolved, relPosix, size: stat.size });
+      }
+    }
+  }
+  function removeEmptySubdirs(rootDir, currentDir) {
+    if (!fs5.existsSync(currentDir)) return;
+    for (const entry of fs5.readdirSync(currentDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const resolved = path5.resolve(currentDir, entry.name);
+      if (!resolved.startsWith(rootDir + path5.sep)) continue;
+      removeEmptySubdirs(rootDir, resolved);
+      if (fs5.readdirSync(resolved).length === 0) {
+        fs5.rmdirSync(resolved);
+      }
+    }
+  }
   router.post("/api/maintenance/cleanup-images", requireAdminOrStaff("canRunMaintenance"), async (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     try {
@@ -6796,12 +6852,81 @@ function createAdminRouter() {
           reclaimedBytes += extra.size;
         }
       }
-      await Promise.all(keysToDelete.map((k) => deleteRecordPhysicallyFromStore(k)));
+      const deleteKeySet = new Set(keysToDelete);
+      const liveReferenceChunks = [];
+      for (const [k, v] of Object.entries(allData)) {
+        if (deleteKeySet.has(k) || k.startsWith("media_files/")) continue;
+        if (v !== null && v !== void 0) {
+          liveReferenceChunks.push(JSON.stringify(v));
+        }
+      }
+      const rootDir = process.cwd();
+      liveReferenceChunks.push(collectStaticAppAssetReferences(rootDir));
+      const referenceCorpus = liveReferenceChunks.join("\n");
+      let deletedImageFiles = 0;
+      const mediaIdsToDelete = /* @__PURE__ */ new Set();
+      const aistudioDir = path5.resolve(rootDir, "public", "assets", "aistudio");
+      const aistudioFiles = [];
+      walkDirFiles(aistudioDir, aistudioDir, aistudioFiles);
+      for (const file of aistudioFiles) {
+        if (!file.absPath.startsWith(aistudioDir + path5.sep)) continue;
+        if (!/\.(png|jpe?g|webp|gif|svg|avif)$/i.test(file.relPosix)) continue;
+        if (!referenceCorpus.includes(file.relPosix)) {
+          fs5.unlinkSync(file.absPath);
+          deletedImageFiles += 1;
+          reclaimedBytes += file.size;
+        }
+      }
+      const uploadsDir = path5.resolve(rootDir, "public", "uploads");
+      const uploadFiles = [];
+      walkDirFiles(uploadsDir, uploadsDir, uploadFiles);
+      for (const file of uploadFiles) {
+        if (!file.absPath.startsWith(uploadsDir + path5.sep)) continue;
+        const publicUrl = `/uploads/${file.relPosix}`;
+        if (!referenceCorpus.includes(publicUrl) && !referenceCorpus.includes(file.relPosix)) {
+          fs5.unlinkSync(file.absPath);
+          deletedImageFiles += 1;
+          reclaimedBytes += file.size;
+        }
+      }
+      removeEmptySubdirs(uploadsDir, uploadsDir);
+      const mediaDir = path5.resolve(rootDir, "data", "media");
+      const mediaFiles = [];
+      walkDirFiles(mediaDir, mediaDir, mediaFiles);
+      for (const file of mediaFiles) {
+        if (!file.absPath.startsWith(mediaDir + path5.sep)) continue;
+        const baseId = file.relPosix.replace(/\.[^.]+$/, "");
+        const apiUrlPrefix = `/api/media/file/${baseId}`;
+        if (!referenceCorpus.includes(apiUrlPrefix)) {
+          fs5.unlinkSync(file.absPath);
+          deletedImageFiles += 1;
+          reclaimedBytes += file.size;
+          if (/^[a-zA-Z0-9_-]+$/.test(baseId)) {
+            mediaIdsToDelete.add(baseId);
+          }
+        }
+      }
+      for (const key of Object.keys(allData)) {
+        if (!key.startsWith("media_files/")) continue;
+        const fileId = key.slice("media_files/".length);
+        if (!referenceCorpus.includes(`/api/media/file/${fileId}`)) {
+          mediaIdsToDelete.add(fileId);
+        }
+      }
+      await Promise.all([
+        ...keysToDelete.map((k) => deleteRecordPhysicallyFromStore(k)),
+        ...[...mediaIdsToDelete].map((id) => deleteInternalStoreItem(`media_files/${id}`).catch(() => {
+        }))
+      ]);
+      const totalRemoved = keysToDelete.length + deletedImageFiles + mediaIdsToDelete.size;
+      const savedKb = (reclaimedBytes / 1024).toFixed(1);
       return res.json({
         success: true,
         removedRecords: keysToDelete.length,
+        removedOrphanRecords: keysToDelete.length + mediaIdsToDelete.size,
+        strippedUnreferencedImages: deletedImageFiles,
         reclaimedBytes,
-        message: keysToDelete.length > 0 ? `\u062A\u0645 \u062A\u0646\u0638\u064A\u0641 ${keysToDelete.length} \u0633\u062C\u0644 \u0648\u0635\u0648\u0631 \u064A\u062A\u064A\u0645\u0629 \u063A\u064A\u0631 \u0645\u0631\u062A\u0628\u0637\u0629 \u0648\u062A\u0648\u0641\u064A\u0631 ${(reclaimedBytes / 1024).toFixed(1)} \u0643\u064A\u0644\u0648\u0628\u0627\u064A\u062A` : "\u0642\u0627\u0639\u062F\u0629 \u0627\u0644\u0628\u064A\u0627\u0646\u0627\u062A \u0646\u0638\u064A\u0641\u0629 \u062D\u0627\u0644\u064A\u0627\u064B \u0648\u0644\u0627 \u062A\u0648\u062C\u062F \u0635\u0648\u0631 \u0623\u0648 \u0633\u062C\u0644\u0627\u062A \u064A\u062A\u064A\u0645\u0629 \u063A\u064A\u0631 \u0645\u0633\u062A\u062E\u062F\u0645\u0629."
+        message: totalRemoved > 0 ? `\u062A\u0645 \u062A\u0646\u0638\u064A\u0641 ${deletedImageFiles} \u0635\u0648\u0631\u0629 \u063A\u064A\u0631 \u0645\u0633\u062A\u062E\u062F\u0645\u0629 \u0648${keysToDelete.length + mediaIdsToDelete.size} \u0633\u062C\u0644 \u064A\u062A\u064A\u0645 \u0648\u062A\u0648\u0641\u064A\u0631 ${savedKb} \u0643\u064A\u0644\u0648\u0628\u0627\u064A\u062A` : "\u0644\u0627 \u062A\u0648\u062C\u062F \u0635\u0648\u0631 \u0645\u062E\u0632\u0646\u0629 \u0623\u0648 \u0645\u0644\u0641\u0627\u062A \u063A\u064A\u0631 \u0645\u0647\u0645\u0629 \u0644\u0644\u062D\u0630\u0641 \u062D\u0627\u0644\u064A\u0627\u064B."
       });
     } catch (err) {
       return res.status(500).json({
@@ -7462,10 +7587,10 @@ function createAdminRouter() {
 
 // server/visitor-analytics.ts
 import crypto4 from "node:crypto";
-import fs5 from "node:fs";
-import path5 from "node:path";
+import fs6 from "node:fs";
+import path6 from "node:path";
 var VISITOR_STORE_KEY = "settings/visitor_analytics_internal";
-var VISITOR_FILE = path5.resolve(process.cwd(), "data/visitor-analytics.json");
+var VISITOR_FILE = path6.resolve(process.cwd(), "data/visitor-analytics.json");
 var DAY_MS = 24 * 60 * 60 * 1e3;
 var RETENTION_MS = 90 * DAY_MS;
 var MAX_STORED_RECORDS = 15e3;
@@ -7536,8 +7661,8 @@ function sanitizeDoc(raw) {
 }
 async function readVisitorFileOrFallback() {
   try {
-    if (fs5.existsSync(VISITOR_FILE)) {
-      const raw = await fs5.promises.readFile(VISITOR_FILE, "utf-8");
+    if (fs6.existsSync(VISITOR_FILE)) {
+      const raw = await fs6.promises.readFile(VISITOR_FILE, "utf-8");
       return JSON.parse(raw);
     }
   } catch {
@@ -7545,11 +7670,11 @@ async function readVisitorFileOrFallback() {
   return getInternalStoreItem(VISITOR_STORE_KEY);
 }
 async function persistVisitorSnapshot(snapshot) {
-  const dir = path5.dirname(VISITOR_FILE);
-  await fs5.promises.mkdir(dir, { recursive: true });
+  const dir = path6.dirname(VISITOR_FILE);
+  await fs6.promises.mkdir(dir, { recursive: true });
   const tmpPath = `${VISITOR_FILE}.${process.pid}.${Date.now()}.tmp`;
-  await fs5.promises.writeFile(tmpPath, JSON.stringify(snapshot), "utf-8");
-  await fs5.promises.rename(tmpPath, VISITOR_FILE);
+  await fs6.promises.writeFile(tmpPath, JSON.stringify(snapshot), "utf-8");
+  await fs6.promises.rename(tmpPath, VISITOR_FILE);
   await upsertInternalKvSilent(VISITOR_STORE_KEY, snapshot);
 }
 async function ensureLoaded() {
@@ -7708,13 +7833,13 @@ async function getVisitorAnalyticsStats() {
 
 // server/pwa-icon.ts
 import crypto5 from "node:crypto";
-import fs6 from "node:fs";
+import fs7 from "node:fs";
 import net2 from "node:net";
-import path6 from "node:path";
-var PUBLIC_DIR = path6.resolve(process.cwd(), "public");
-var SRC_ASSETS_DIR = path6.resolve(process.cwd(), "src/assets");
-var FALLBACK_ICON_512 = path6.join(PUBLIC_DIR, "pwa-512x512.png");
-var FALLBACK_ICON_192 = path6.join(PUBLIC_DIR, "pwa-192x192.png");
+import path7 from "node:path";
+var PUBLIC_DIR = path7.resolve(process.cwd(), "public");
+var SRC_ASSETS_DIR = path7.resolve(process.cwd(), "src/assets");
+var FALLBACK_ICON_512 = path7.join(PUBLIC_DIR, "pwa-512x512.png");
+var FALLBACK_ICON_192 = path7.join(PUBLIC_DIR, "pwa-192x192.png");
 var MAX_REMOTE_ICON_BYTES = 5 * 1024 * 1024;
 var REMOTE_FETCH_TIMEOUT_MS = 5e3;
 var remoteIconCache = /* @__PURE__ */ new Map();
@@ -7842,13 +7967,13 @@ function isDisallowedHostname(hostname) {
 function readLocalWorkspaceImage(logoPath) {
   const cleanRel = logoPath.split("?")[0].split("#")[0].replace(/^\/+/, "");
   if (!cleanRel || cleanRel.includes("..")) return null;
-  const candidateBases = cleanRel.startsWith("src/assets/") ? [SRC_ASSETS_DIR] : [PUBLIC_DIR, path6.resolve(process.cwd(), "dist")];
+  const candidateBases = cleanRel.startsWith("src/assets/") ? [SRC_ASSETS_DIR] : [PUBLIC_DIR, path7.resolve(process.cwd(), "dist")];
   for (const base of candidateBases) {
-    const target = cleanRel.startsWith("src/assets/") ? path6.resolve(process.cwd(), cleanRel) : path6.resolve(base, cleanRel);
-    if (!target.startsWith(base + path6.sep)) continue;
+    const target = cleanRel.startsWith("src/assets/") ? path7.resolve(process.cwd(), cleanRel) : path7.resolve(base, cleanRel);
+    if (!target.startsWith(base + path7.sep)) continue;
     try {
-      if (fs6.existsSync(target) && fs6.statSync(target).isFile()) {
-        return fs6.readFileSync(target);
+      if (fs7.existsSync(target) && fs7.statSync(target).isFile()) {
+        return fs7.readFileSync(target);
       }
     } catch {
     }
@@ -7900,8 +8025,8 @@ async function fetchPublicImageBuffer(urlStr) {
   }
 }
 function getFallbackPwaIcon() {
-  const fallbackFile = fs6.existsSync(FALLBACK_ICON_512) ? FALLBACK_ICON_512 : FALLBACK_ICON_192;
-  const buffer = fs6.existsSync(fallbackFile) ? fs6.readFileSync(fallbackFile) : Buffer.alloc(0);
+  const fallbackFile = fs7.existsSync(FALLBACK_ICON_512) ? FALLBACK_ICON_512 : FALLBACK_ICON_192;
+  const buffer = fs7.existsSync(fallbackFile) ? fs7.readFileSync(fallbackFile) : Buffer.alloc(0);
   const dims = detectImageDimensions(buffer, "image/png");
   return {
     buffer,
@@ -8129,7 +8254,7 @@ async function sendOrderWebPushNotifications(rest, ord) {
 
 // server.ts
 var __filename = fileURLToPath(import.meta.url);
-var __dirname = path7.dirname(__filename);
+var __dirname = path8.dirname(__filename);
 var app = express2();
 var rawPort = String(process.env.PORT || "3000").trim();
 var PORT = /^\d+$/.test(rawPort) ? Number(rawPort) : rawPort;
@@ -8727,7 +8852,7 @@ app.post("/api/db", async (req, res) => {
         return Boolean(perms.canManageRestaurants);
       }
       if (key.startsWith("orders/") || key.startsWith("loyalty/")) {
-        return Boolean(perms.canManageRestaurants || perms.canViewAnalytics);
+        return Boolean(perms.canManageRestaurants);
       }
       if (key.startsWith("accounts/")) {
         if (isDelete) return Boolean(perms.canDeletePartner && ses.role === "owner");
@@ -10217,7 +10342,7 @@ app.post("/api/customer-profile", async (req, res) => {
     return res.status(500).json({ ok: false });
   }
 });
-var MEDIA_DISK_DIR = path7.resolve(process.cwd(), "data/media");
+var MEDIA_DISK_DIR = path8.resolve(process.cwd(), "data/media");
 function detectImageFormatAndMime(buf) {
   if (buf.length < 12) return null;
   if (buf[0] === 255 && buf[1] === 216 && buf[2] === 255) {
@@ -10256,14 +10381,14 @@ app.post("/api/media/upload", async (req, res) => {
       return res.status(400).json({ ok: false, error: "\u0635\u064A\u063A\u0629 \u0627\u0644\u0635\u0648\u0631\u0629 \u063A\u064A\u0631 \u0645\u062F\u0639\u0648\u0645\u0629 (JPG/PNG/WebP/GIF \u0641\u0642\u0637)." });
     }
     const fileId = `img_${Date.now().toString(36)}_${crypto7.randomBytes(5).toString("hex")}`;
-    if (!fs7.existsSync(MEDIA_DISK_DIR)) {
-      fs7.mkdirSync(MEDIA_DISK_DIR, { recursive: true });
+    if (!fs8.existsSync(MEDIA_DISK_DIR)) {
+      fs8.mkdirSync(MEDIA_DISK_DIR, { recursive: true });
     }
-    const diskPath = path7.resolve(MEDIA_DISK_DIR, `${fileId}.${detected.ext}`);
-    if (!diskPath.startsWith(MEDIA_DISK_DIR + path7.sep)) {
+    const diskPath = path8.resolve(MEDIA_DISK_DIR, `${fileId}.${detected.ext}`);
+    if (!diskPath.startsWith(MEDIA_DISK_DIR + path8.sep)) {
       return res.status(400).json({ ok: false, error: "\u0645\u0633\u0627\u0631 \u063A\u064A\u0631 \u0635\u0627\u0644\u062D." });
     }
-    fs7.writeFileSync(diskPath, buf);
+    fs8.writeFileSync(diskPath, buf);
     await setInternalStoreItem(`media_files/${fileId}`, {
       fileId,
       fileName: String(fileName || "image").slice(0, 120),
@@ -10300,8 +10425,8 @@ app.get("/api/media/file/:fileParam", async (req, res) => {
       gif: "image/gif"
     };
     for (const ext2 of ["jpg", "png", "webp", "gif"]) {
-      const candidate = path7.resolve(MEDIA_DISK_DIR, `${fileId}.${ext2}`);
-      if (candidate.startsWith(MEDIA_DISK_DIR + path7.sep) && fs7.existsSync(candidate)) {
+      const candidate = path8.resolve(MEDIA_DISK_DIR, `${fileId}.${ext2}`);
+      if (candidate.startsWith(MEDIA_DISK_DIR + path8.sep) && fs8.existsSync(candidate)) {
         res.setHeader("Content-Type", mimeByExt[ext2]);
         res.setHeader("X-Content-Type-Options", "nosniff");
         res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
@@ -10316,10 +10441,10 @@ app.get("/api/media/file/:fileParam", async (req, res) => {
     const ext = stored.ext === "png" || stored.ext === "webp" || stored.ext === "gif" ? stored.ext : "jpg";
     const mime = stored.mime || mimeByExt[ext];
     try {
-      if (!fs7.existsSync(MEDIA_DISK_DIR)) fs7.mkdirSync(MEDIA_DISK_DIR, { recursive: true });
-      const diskPath = path7.resolve(MEDIA_DISK_DIR, `${fileId}.${ext}`);
-      if (diskPath.startsWith(MEDIA_DISK_DIR + path7.sep)) {
-        fs7.writeFileSync(diskPath, buf);
+      if (!fs8.existsSync(MEDIA_DISK_DIR)) fs8.mkdirSync(MEDIA_DISK_DIR, { recursive: true });
+      const diskPath = path8.resolve(MEDIA_DISK_DIR, `${fileId}.${ext}`);
+      if (diskPath.startsWith(MEDIA_DISK_DIR + path8.sep)) {
+        fs8.writeFileSync(diskPath, buf);
       }
     } catch {
     }
@@ -10363,9 +10488,9 @@ app.post("/api/dashboard/media/delete-file", async (req, res) => {
       const fileId = m[1];
       let deletedDisk = false;
       for (const ext of ["jpg", "jpeg", "png", "webp", "gif"]) {
-        const target = path7.resolve(MEDIA_DISK_DIR, `${fileId}.${ext}`);
-        if (target.startsWith(MEDIA_DISK_DIR + path7.sep) && fs7.existsSync(target)) {
-          fs7.unlinkSync(target);
+        const target = path8.resolve(MEDIA_DISK_DIR, `${fileId}.${ext}`);
+        if (target.startsWith(MEDIA_DISK_DIR + path8.sep) && fs8.existsSync(target)) {
+          fs8.unlinkSync(target);
           deletedDisk = true;
         }
       }
@@ -10373,11 +10498,11 @@ app.post("/api/dashboard/media/delete-file", async (req, res) => {
       });
       return res.json({ ok: true, deletedFile: deletedDisk || true });
     }
-    const uploadsRoot = path7.resolve(process.cwd(), "public", "uploads");
+    const uploadsRoot = path8.resolve(process.cwd(), "public", "uploads");
     const relPath = url.replace(/^\/uploads\//, "");
-    const resolvedTarget = path7.resolve(uploadsRoot, relPath);
-    if (resolvedTarget.startsWith(uploadsRoot + path7.sep) && fs7.existsSync(resolvedTarget) && fs7.statSync(resolvedTarget).isFile()) {
-      fs7.unlinkSync(resolvedTarget);
+    const resolvedTarget = path8.resolve(uploadsRoot, relPath);
+    if (resolvedTarget.startsWith(uploadsRoot + path8.sep) && fs8.existsSync(resolvedTarget) && fs8.statSync(resolvedTarget).isFile()) {
+      fs8.unlinkSync(resolvedTarget);
       return res.json({ ok: true, deletedFile: true });
     }
     return res.json({ ok: true, deletedFile: false });
@@ -10453,7 +10578,7 @@ app.get("/api/proxy-image", async (req, res) => {
 });
 app.use(createAdminRouter());
 app.use(createSubdomainRouter());
-var FONTS_DISK_DIR = path7.resolve(process.cwd(), "data/fonts");
+var FONTS_DISK_DIR = path8.resolve(process.cwd(), "data/fonts");
 function detectFontFormatAndMime(fileName, buf) {
   const lower = String(fileName || "").toLowerCase();
   const magic4 = buf.subarray(0, 4);
@@ -10507,11 +10632,11 @@ app.post("/api/admin/fonts/upload", requireAdminOrStaff(), async (req, res) => {
     }
     const fileId = `font_${Date.now().toString(36)}_${crypto7.randomBytes(4).toString("hex")}`;
     const numericWeight = Number(weight) === 0 ? 0 : Math.min(900, Math.max(100, Number(weight) || 400));
-    if (!fs7.existsSync(FONTS_DISK_DIR)) {
-      fs7.mkdirSync(FONTS_DISK_DIR, { recursive: true });
+    if (!fs8.existsSync(FONTS_DISK_DIR)) {
+      fs8.mkdirSync(FONTS_DISK_DIR, { recursive: true });
     }
-    const diskPath = path7.join(FONTS_DISK_DIR, `${fileId}.${detected.ext}`);
-    fs7.writeFileSync(diskPath, buf);
+    const diskPath = path8.join(FONTS_DISK_DIR, `${fileId}.${detected.ext}`);
+    fs8.writeFileSync(diskPath, buf);
     await applyChanges(
       {
         put: {
@@ -10551,8 +10676,8 @@ app.get("/api/fonts/file/:fileParam", async (req, res) => {
     }
     const fileId = match[1];
     for (const ext2 of ["otf", "ttf", "woff2", "woff"]) {
-      const candidate = path7.join(FONTS_DISK_DIR, `${fileId}.${ext2}`);
-      if (fs7.existsSync(candidate)) {
+      const candidate = path8.join(FONTS_DISK_DIR, `${fileId}.${ext2}`);
+      if (fs8.existsSync(candidate)) {
         const mime2 = ext2 === "otf" ? "font/otf" : ext2 === "ttf" ? "font/ttf" : ext2 === "woff2" ? "font/woff2" : "font/woff";
         res.setHeader("Content-Type", mime2);
         res.setHeader("Access-Control-Allow-Origin", "*");
@@ -10568,8 +10693,8 @@ app.get("/api/fonts/file/:fileParam", async (req, res) => {
     const ext = stored.ext || "otf";
     const mime = stored.mime || "font/otf";
     try {
-      if (!fs7.existsSync(FONTS_DISK_DIR)) fs7.mkdirSync(FONTS_DISK_DIR, { recursive: true });
-      fs7.writeFileSync(path7.join(FONTS_DISK_DIR, `${fileId}.${ext}`), buf);
+      if (!fs8.existsSync(FONTS_DISK_DIR)) fs8.mkdirSync(FONTS_DISK_DIR, { recursive: true });
+      fs8.writeFileSync(path8.join(FONTS_DISK_DIR, `${fileId}.${ext}`), buf);
     } catch {
     }
     res.setHeader("Content-Type", mime);
@@ -10593,9 +10718,9 @@ app.delete("/api/admin/fonts/:fileId", requireAdminOrStaff(), async (req, res) =
       return res.status(400).json({ ok: false, error: "\u0645\u0639\u0631\u0641 \u0627\u0644\u062E\u0637 \u063A\u064A\u0631 \u0635\u0627\u0644\u062D" });
     }
     for (const ext of ["otf", "ttf", "woff2", "woff"]) {
-      const p = path7.join(FONTS_DISK_DIR, `${fileId}.${ext}`);
-      if (fs7.existsSync(p)) {
-        fs7.unlinkSync(p);
+      const p = path8.join(FONTS_DISK_DIR, `${fileId}.${ext}`);
+      if (fs8.existsSync(p)) {
+        fs8.unlinkSync(p);
       }
     }
     await applyChanges({ del: [`custom_font_files/${fileId}`] }, false);
@@ -11748,14 +11873,14 @@ async function startServer() {
     res.setHeader("Surrogate-Control", "no-store");
   };
   if (isProduction) {
-    const localDist = path7.resolve(__dirname, "dist");
-    const cwdDist = path7.resolve(process.cwd(), "dist");
-    const distDir = fs7.existsSync(path7.join(localDist, "index.html")) ? localDist : cwdDist;
-    const distAssetsDir = path7.join(distDir, "assets");
-    const distUploadsDir = path7.join(distDir, "uploads");
-    const publicUploadsDir = path7.resolve(process.cwd(), "public/uploads");
-    const uploadsDir = fs7.existsSync(distUploadsDir) ? distUploadsDir : publicUploadsDir;
-    const indexHtmlPath = path7.join(distDir, "index.html");
+    const localDist = path8.resolve(__dirname, "dist");
+    const cwdDist = path8.resolve(process.cwd(), "dist");
+    const distDir = fs8.existsSync(path8.join(localDist, "index.html")) ? localDist : cwdDist;
+    const distAssetsDir = path8.join(distDir, "assets");
+    const distUploadsDir = path8.join(distDir, "uploads");
+    const publicUploadsDir = path8.resolve(process.cwd(), "public/uploads");
+    const uploadsDir = fs8.existsSync(distUploadsDir) ? distUploadsDir : publicUploadsDir;
+    const indexHtmlPath = path8.join(distDir, "index.html");
     app.use(
       "/assets",
       express2.static(distAssetsDir, {
@@ -11764,7 +11889,7 @@ async function startServer() {
         index: false
       })
     );
-    if (fs7.existsSync(uploadsDir)) {
+    if (fs8.existsSync(uploadsDir)) {
       app.use(
         "/uploads",
         express2.static(uploadsDir, {
@@ -11778,7 +11903,7 @@ async function startServer() {
         cacheControl: false,
         index: false,
         setHeaders: (res, filePath) => {
-          const base = path7.basename(filePath).toLowerCase();
+          const base = path8.basename(filePath).toLowerCase();
           if (base === "sw.js" || base === "manifest.webmanifest" || base === "index.html") {
             setNoStoreHtmlHeaders(res);
           } else {
@@ -11791,9 +11916,9 @@ async function startServer() {
     let cachedProdHtmlMtime = -1;
     const readFreshProdHtml = () => {
       try {
-        const st = fs7.statSync(indexHtmlPath);
+        const st = fs8.statSync(indexHtmlPath);
         if (!cachedProdHtml || st.mtimeMs !== cachedProdHtmlMtime) {
-          cachedProdHtml = fs7.readFileSync(indexHtmlPath, "utf-8");
+          cachedProdHtml = fs8.readFileSync(indexHtmlPath, "utf-8");
           cachedProdHtmlMtime = st.mtimeMs;
         }
         return cachedProdHtml;
@@ -11848,7 +11973,7 @@ async function startServer() {
       }
       setNoStoreHtmlHeaders(res);
       try {
-        const rawTemplate = fs7.readFileSync(path7.resolve(process.cwd(), "index.html"), "utf-8");
+        const rawTemplate = fs8.readFileSync(path8.resolve(process.cwd(), "index.html"), "utf-8");
         const transformed = await vite.transformIndexHtml(req.originalUrl, rawTemplate);
         const subdomainResolved = res.locals.subdomainResolved;
         if (subdomainResolved?.found) {

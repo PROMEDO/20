@@ -109,7 +109,6 @@ export interface ThemePreset {
 
 export interface StaffPermissions {
   canViewHome?: boolean;
-  canViewAnalytics?: boolean;
   canManageRestaurants?: boolean;
   canCreatePartner?: boolean;
   canEditPartnerPlan?: boolean;

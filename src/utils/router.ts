@@ -18,7 +18,6 @@ export type DashboardTabId =
 
 export type AdminTabId =
   | 'home'
-  | 'ov'
   | 'partners'
   | 'notes'
   | 'reports'
@@ -74,7 +73,6 @@ const DASHBOARD_TAB_TO_SEGMENT: Record<DashboardTabId, string> = {
 
 const ADMIN_TABS: AdminTabId[] = [
   'home',
-  'ov',
   'partners',
   'notes',
   'reports',

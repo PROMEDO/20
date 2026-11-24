@@ -32,7 +32,6 @@ interface MyAccountSectionProps {
 }
 
 const PERMISSION_LABELS: Array<{ key: keyof StaffPermissions; label: string }> = [
-  { key: 'canViewAnalytics', label: 'عرض نظرة عامة والتحليلات' },
   { key: 'canManageRestaurants', label: 'إدارة الشركاء والحسابات' },
   { key: 'canEditPartnerPlan', label: 'إعطاء الباقات وتمديد المدد' },
   { key: 'canImpersonatePartner', label: 'الدخول إلى لوحة الشريك' },

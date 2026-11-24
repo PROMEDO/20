@@ -47,11 +47,7 @@ const TelegramSettingsCard = lazy(() =>
 const PlanFeaturesOrderEditor = lazy(() =>
   import('../components/admin/PlanFeaturesOrderEditor').then((m) => ({ default: m.PlanFeaturesOrderEditor }))
 );
-import {
-  SystemInfrastructureCard,
-  SystemLiveStatusBadge,
-  useSystemDbStatus,
-} from '../components/admin/SystemHealthWidget';
+import { cleanupUnusedImagesApi } from '../utils/adminApi';
 import {
   DEFAULT_TYPOGRAPHY,
   PLATFORM_FONT_CATALOG,
@@ -59,7 +55,6 @@ import {
   applyTheme,
   buildThemeForMode,
   flushPendingDbSync,
-  getActivityLogs,
   getCollection,
   getDbRevision,
   getSystemPrefersDark,
@@ -73,14 +68,12 @@ import {
 } from '../utils/storage';
 import {
   DEFAULT_MOTION_CONFIG,
-  dashCardMotion,
   dashSectionMotion,
   dashTabMotion,
   syncDashboardMotionFromSite,
 } from '../utils/dashboardMotion';
 import {
   Home,
-  LayoutDashboard,
   Store,
   Lightbulb,
   Users,
@@ -90,7 +83,6 @@ import {
   X,
   Eye,
   Shield,
-  RefreshCw,
   GripVertical,
   ChevronUp,
   ChevronDown,
@@ -104,6 +96,7 @@ import {
   AlertTriangle,
   Loader2,
   Save,
+  Trash2,
 } from 'lucide-react';
 
 interface AdminViewProps {
@@ -119,13 +112,13 @@ interface AdminViewProps {
   showToast: (msg: string) => void;
 }
 
-type MainTab = 'home' | 'ov' | 'partners' | 'home_editor' | 'notes' | 'reports' | 'staff' | 'settings' | 'account';
+type MainTab = 'home' | 'partners' | 'home_editor' | 'notes' | 'reports' | 'staff' | 'settings' | 'account';
 
 function normalizeInitialTab(sub?: string): MainTab {
   if (!sub) return 'home';
   if (sub === 'accounts') return 'partners';
   if (sub === 'home-editor' || sub === 'plans') return 'home_editor';
-  if (['home', 'ov', 'partners', 'home_editor', 'notes', 'reports', 'staff', 'settings', 'account'].includes(sub)) {
+  if (['home', 'partners', 'home_editor', 'notes', 'reports', 'staff', 'settings', 'account'].includes(sub)) {
     return sub as MainTab;
   }
   return 'home';
@@ -149,7 +142,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const staffPerms: StaffPermissions = isSuperAdmin
     ? {
         canViewHome: true,
-        canViewAnalytics: true,
         canManageRestaurants: true,
         canCreatePartner: true,
         canEditPartnerPlan: true,
@@ -176,7 +168,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
         const canSettings = Boolean(rawPerms.canManageSettings ?? canPlans);
         return {
           canViewHome: rawPerms.canViewHome !== false,
-          canViewAnalytics: Boolean(rawPerms.canViewAnalytics),
           canManageRestaurants: canPartners,
           canCreatePartner: Boolean(rawPerms.canCreatePartner ?? canPartners),
           canEditPartnerPlan: Boolean(rawPerms.canEditPartnerPlan || rawPerms.canExtendSubscription),
@@ -206,9 +197,10 @@ export const AdminView: React.FC<AdminViewProps> = ({
   }, [initialSubTab]);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [logFilter, setLogFilter] = useState<string>('all');
   const [dragAdminIdx, setDragAdminIdx] = useState<number | null>(null);
   const [dragDashIdx, setDragDashIdx] = useState<number | null>(null);
+  const [cleaningImages, setCleaningImages] = useState(false);
+  const [cleanupSummary, setCleanupSummary] = useState('');
 
   // Editable site settings state
   const [editSite, setEditSite] = useState<SiteSettings>(site);
@@ -283,53 +275,47 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
   const dbRev = getDbRevision();
 
-  // Collections for Overview stats & logs
-  const {
-    allRestaurants,
-    allOrders,
-    allReports,
-    newReportsCount,
-    activityLogs,
-    paidPartners,
-    trialPartners,
-    totalOrdersCount,
-    thisMonthOrdersCount,
-  } = useMemo(() => {
-    const rests = getCollection<Restaurant>('restaurants');
-    const orders = getCollection<{ tot: number; at?: number }>('orders');
+  const newReportsCount = useMemo(() => {
     const reports = getCollection<ProblemReport>('reports');
-    const newRep = reports.filter((r) => {
+    return reports.filter((r) => {
       const raw = String(r.st || r.status || 'new').toLowerCase();
       return raw === 'new' || raw === 'pending';
     }).length;
-    const logs = getActivityLogs(80);
-    const paid = rests.filter((r) => r.isPaid && r.id !== 'demo');
-    const trial = rests.filter((r) => !r.isPaid && r.id !== 'demo');
-    const monthAgoTs = Date.now() - 30 * 86400000;
-    const thisMonth = orders.filter((o) => Number(o.at || 0) >= monthAgoTs).length;
-    return {
-      allRestaurants: rests,
-      allOrders: orders,
-      allReports: reports,
-      newReportsCount: newRep,
-      activityLogs: logs,
-      paidPartners: paid,
-      trialPartners: trial,
-      totalOrdersCount: orders.length,
-      thisMonthOrdersCount: thisMonth,
-    };
   }, [dbRev]);
 
-  const systemDbHealth = useSystemDbStatus(showToast);
-
-  const filteredLogs = useMemo(
-    () =>
-      activityLogs.filter((l) => {
-        if (logFilter === 'all') return true;
-        return l.type === logFilter;
-      }),
-    [activityLogs, logFilter]
-  );
+  const handleCleanupUnusedImages = async () => {
+    if (cleaningImages) return;
+    if (!isSuperAdmin && !staffPerms.canRunMaintenance && !staffPerms.canManageSettings) {
+      showToast('ليست لديك صلاحية تنظيف الصور المخزنة');
+      return;
+    }
+    setCleaningImages(true);
+    setCleanupSummary('');
+    try {
+      const res = await cleanupUnusedImagesApi();
+      const deletedCount = Number(res.strippedUnreferencedImages || 0) + Number(res.removedOrphanRecords || 0);
+      const savedKb = (Number(res.reclaimedBytes || 0) / 1024).toFixed(1);
+      const msg =
+        (res as { message?: string }).message ||
+        (deletedCount > 0
+          ? `تم حذف ${deletedCount} صورة وملف غير مستخدم وتوفير ${savedKb} كيلوبايت`
+          : 'لا توجد صور مخزنة غير مهمة حالياً.');
+      setCleanupSummary(msg);
+      showToast(msg);
+      logActivity(
+        session.phone || session.email || 'المدير',
+        'تنظيف الصور المخزنة غير المهمة',
+        msg,
+        'system'
+      );
+      onRefresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'تعذر تنظيف الصور المخزنة';
+      showToast(msg);
+    } finally {
+      setCleaningImages(false);
+    }
+  };
 
   const buildNormalizedSitePayload = useCallback((): SiteSettings => {
     const cleanedAdminLabels: Record<string, string> = {};
@@ -790,7 +776,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const DEFAULT_ADMIN_TAB_META: Array<{ id: MainTab; def: string }> = [
     { id: 'home', def: 'الصفحة الرئيسية' },
     { id: 'home_editor', def: 'تعديل الصفحة الرئيسية' },
-    { id: 'ov', def: 'نظرة عامة والتحليلات' },
     { id: 'partners', def: 'الشركاء والحسابات' },
     { id: 'notes', def: 'الملاحظات' },
     { id: 'reports', def: 'البلاغات' },
@@ -825,12 +810,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
       Icon: LayoutTemplate,
       label: customAdminLabel('home_editor', 'تعديل الصفحة الرئيسية'),
       perm: isSuperAdmin || Boolean(staffPerms.canEditHomePage || staffPerms.canManagePlans),
-    },
-    {
-      id: 'ov' as const,
-      Icon: LayoutDashboard,
-      label: customAdminLabel('ov', 'نظرة عامة والتحليلات'),
-      perm: isSuperAdmin || Boolean(staffPerms.canViewAnalytics),
     },
     {
       id: 'partners' as const,
@@ -1179,201 +1158,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
         )}
 
         {/* ============================================================== */}
-        {/* TAB 1: OVERVIEW (READ-ONLY STATS, SERVER STATUS, ACTIVITY LOGS) */}
-        {/* ============================================================== */}
-        {effectiveTab === 'ov' && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '16px' }}>
-              <div>
-                <h1 style={{ margin: 0 }}>{customAdminLabel('ov', 'نظرة عامة على المنصة')}</h1>
-                <p className="muted" style={{ margin: '4px 0 0', fontSize: '13px' }}>
-                  قسم استعراض الإحصائيات الشاملة وحالة الخوادم وسجل النشاطات (للاطلاع فقط دون تعديل).
-                </p>
-              </div>
-              <div className="rw" style={{ gap: '8px' }}>
-                <SystemLiveStatusBadge health={systemDbHealth} />
-                <button
-                  type="button"
-                  className="btn s"
-                  onClick={() => void systemDbHealth.refresh(true)}
-                  disabled={systemDbHealth.isLoading}
-                >
-                  <RefreshCw size={14} className={systemDbHealth.isLoading ? 'animate-spin' : ''} />
-                  تحديث الحالة
-                </button>
-              </div>
-            </div>
-
-            {/* Core Metrics */}
-            <div className="kp k4" style={{ margin: '18px 0' }}>
-              <motion.div
-                className="card"
-                {...dashCardMotion(prefersReducedMotion, 0, 1, false, 0.08)}
-              >
-                <div className="v tabular-nums">{paidPartners.length}</div>
-                <div className="l">الشركاء المشتركون (باقة مدفوعة) 🌟</div>
-              </motion.div>
-              <motion.div
-                className="card"
-                {...dashCardMotion(prefersReducedMotion, 1, 1, false, 0.08)}
-              >
-                <div className="v tabular-nums">{trialPartners.length}</div>
-                <div className="l">المنيوات التجريبية المجانية 🆓</div>
-              </motion.div>
-              <motion.div
-                className="card"
-                {...dashCardMotion(prefersReducedMotion, 2, 1, false, 0.08)}
-              >
-                <div className="v tabular-nums">{totalOrdersCount}</div>
-                <div className="l">إجمالي الطلبات بالمنصة 📦</div>
-              </motion.div>
-              <motion.div
-                className="card"
-                {...dashCardMotion(prefersReducedMotion, 3, 1, false, 0.08)}
-              >
-                <div className="v tabular-nums">{thisMonthOrdersCount}</div>
-                <div className="l">طلبات هذا الشهر 📈</div>
-              </motion.div>
-            </div>
-
-            {/* Live Server Status & Cloud Infrastructure (/api/db-status) */}
-            <SystemInfrastructureCard health={systemDbHealth} />
-
-            {/* Embedded Activity Log (سجل النشاطات مدمج هنا لرؤية حركات المشرفين) */}
-            <motion.div
-              className="card"
-              {...dashSectionMotion(prefersReducedMotion, 0.08, true)}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: '10px',
-                  marginBottom: '14px',
-                }}
-              >
-                <div>
-                  <h3 style={{ margin: 0 }}>📜 سجل نشاطات الموظفين والمشرفين</h3>
-                  <p className="muted" style={{ margin: '2px 0 0', fontSize: '12px' }}>
-                    تتبع فوري وموثق لكل عملية يقوم بها أي مشرف أو موظف بالمنصة.
-                  </p>
-                </div>
-                <div className="rw" style={{ gap: '6px' }}>
-                  {[
-                    { id: 'all', label: 'الكل' },
-                    { id: 'restaurant', label: 'المطاعم' },
-                    { id: 'staff', label: 'الموظفون' },
-                    { id: 'plan', label: 'الباقات' },
-                    { id: 'theme', label: 'المظهر' },
-                  ].map((f) => (
-                    <button
-                      key={f.id}
-                      type="button"
-                      className={`btn s${logFilter === f.id ? ' p' : ''}`}
-                      onClick={() => setLogFilter(f.id)}
-                    >
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="tw desktop-only-table">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>الوقت</th>
-                      <th>القائم بالعملية</th>
-                      <th>النوع</th>
-                      <th>النشاط</th>
-                      <th>التفاصيل</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredLogs.slice(0, 15).map((log) => {
-                      const dt = new Date(log.at);
-                      const timeStr = `${dt.toLocaleDateString('ar-IQ-u-nu-latn')} ${dt.toLocaleTimeString('ar-IQ-u-nu-latn', { hour: '2-digit', minute: '2-digit' })}`;
-                      return (
-                        <tr key={log.id}>
-                          <td style={{ fontSize: '12px', whiteSpace: 'nowrap' }} dir="ltr">
-                            {timeStr}
-                          </td>
-                          <td>
-                            <b>{log.actor}</b>
-                          </td>
-                          <td>
-                            <span className="tag" style={{ fontSize: '11px' }}>
-                              {log.type === 'restaurant'
-                                ? 'مطعم'
-                                : log.type === 'staff'
-                                ? 'موظف'
-                                : log.type === 'plan'
-                                ? 'باقة'
-                                : 'نظام'}
-                            </span>
-                          </td>
-                          <td>
-                            <b>{log.action}</b>
-                          </td>
-                          <td className="muted" style={{ fontSize: '12px' }}>
-                            {log.details || '—'}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="mobile-cards-only">
-                {filteredLogs.slice(0, 15).map((log) => {
-                  const dt = new Date(log.at);
-                  const timeStr = `${dt.toLocaleDateString('ar-IQ-u-nu-latn')} ${dt.toLocaleTimeString('ar-IQ-u-nu-latn', { hour: '2-digit', minute: '2-digit' })}`;
-                  return (
-                    <div
-                      key={log.id}
-                      style={{
-                        border: '1px solid var(--mp-glass-border)',
-                        borderRadius: '18px',
-                        padding: '12px',
-                        background: 'var(--mp-glass-control)',
-                        backdropFilter: 'var(--mp-glass-control-blur)',
-                        WebkitBackdropFilter: 'var(--mp-glass-control-blur)',
-                        boxShadow: 'var(--mp-glass-control-shadow)',
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                        <span className="tag" style={{ fontSize: '11px' }}>
-                          {log.type === 'restaurant'
-                            ? 'مطعم'
-                            : log.type === 'staff'
-                            ? 'موظف'
-                            : log.type === 'plan'
-                            ? 'باقة'
-                            : 'نظام'}
-                        </span>
-                        <span className="muted tabular-nums" style={{ fontSize: '11px' }} dir="ltr">
-                          {timeStr}
-                        </span>
-                      </div>
-                      <div style={{ fontWeight: 700, fontSize: '14px', marginBottom: '3px' }}>{log.action}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--brand-ink, #34D399)', marginBottom: '4px' }}>
-                        بواسطة: {log.actor}
-                      </div>
-                      {log.details && (
-                        <div className="muted" style={{ fontSize: '12px', lineHeight: 1.5 }}>{log.details}</div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </motion.div>
-          </div>
-        )}
-
-        {/* ============================================================== */}
         {/* TAB 2: UNIFIED PARTNERS & ACCOUNTS (الشركاء والحسابات)         */}
         {/* ============================================================== */}
         {effectiveTab === 'partners' && (
@@ -1510,6 +1294,9 @@ export const AdminView: React.FC<AdminViewProps> = ({
                   <button type="button" className="mp-jump-btn" onClick={() => jumpTo('adm-plan-features')}>ميزات الباقات</button>
                 )}
                 <button type="button" className="mp-jump-btn" onClick={() => jumpTo('adm-telegram')}>تيليجرام الطلبات</button>
+                {(isSuperAdmin || Boolean(staffPerms.canRunMaintenance || staffPerms.canManageSettings)) && (
+                  <button type="button" className="mp-jump-btn" onClick={() => jumpTo('adm-storage-cleanup')}>الصور المخزنة</button>
+                )}
               </div>
 
               <div className="mp-admin-settings-sections">
@@ -2445,6 +2232,60 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 canManageSettings={isSuperAdmin || Boolean(staffPerms.canManageSettings)}
                 showToast={showToast}
               />
+
+              {/* Frame 7: Simple Unused Stored Images Cleanup */}
+              {(isSuperAdmin || Boolean(staffPerms.canRunMaintenance || staffPerms.canManageSettings)) && (
+                <motion.div
+                  id="adm-storage-cleanup"
+                  className="mp-framed-wrap"
+                  {...dashSectionMotion(prefersReducedMotion, 0.04, true)}
+                >
+                  <div className="mp-framed-title">
+                    <Trash2 size={15} style={{ color: 'var(--brand-ink, #34D399)' }} />
+                    <span>تنظيف الصور المخزنة</span>
+                  </div>
+                  <div
+                    className="mp-framed-box"
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px',
+                    }}
+                  >
+                    <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+                      <div style={{ fontSize: '13.5px', fontWeight: 800, marginBottom: '3px' }}>
+                        حذف الصور المخزنة غير المهمة
+                      </div>
+                      <div className="muted" style={{ fontSize: '12px', lineHeight: 1.6 }}>
+                        حذف الصور والملفات غير المستخدمة في المنيوهات أو الإعدادات لتقليل حجم التخزين.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn s"
+                      disabled={cleaningImages}
+                      onClick={() => void handleCleanupUnusedImages()}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '7px',
+                        fontWeight: 700,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {cleaningImages ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                      <span>{cleaningImages ? 'جارٍ الحذف...' : 'حذف الصور المخزنة غير المهمة'}</span>
+                    </button>
+                    {cleanupSummary && (
+                      <div className="mp-db-cleanup-result">
+                        <span>{cleanupSummary}</span>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
               </div>
             </div>
           );

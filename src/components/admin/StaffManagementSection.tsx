@@ -40,7 +40,6 @@ const STAFF_PRESET_ROLES: { title: string; perms: StaffPermissions }[] = [
     title: 'مشرف عمليات الشركاء',
     perms: {
       canViewHome: true,
-      canViewAnalytics: true,
       canManageRestaurants: true,
       canCreatePartner: true,
       canEditPartnerPlan: true,
@@ -67,7 +66,6 @@ const STAFF_PRESET_ROLES: { title: string; perms: StaffPermissions }[] = [
     title: 'مدير مساعد بصلاحيات كاملة',
     perms: {
       canViewHome: true,
-      canViewAnalytics: true,
       canManageRestaurants: true,
       canCreatePartner: true,
       canEditPartnerPlan: true,
@@ -94,7 +92,6 @@ const STAFF_PRESET_ROLES: { title: string; perms: StaffPermissions }[] = [
     title: 'مسؤول باقات واشتراكات',
     perms: {
       canViewHome: true,
-      canViewAnalytics: true,
       canManageRestaurants: true,
       canCreatePartner: false,
       canEditPartnerPlan: true,
@@ -119,7 +116,6 @@ const STAFF_PRESET_ROLES: { title: string; perms: StaffPermissions }[] = [
     title: 'دعم فني ومراجعة',
     perms: {
       canViewHome: true,
-      canViewAnalytics: true,
       canManageRestaurants: true,
       canCreatePartner: true,
       canEditPartnerPlan: false,
@@ -157,10 +153,9 @@ interface PermissionItemDef {
 
 const PERMISSION_GROUPS: Array<{ title: string; items: PermissionItemDef[] }> = [
   {
-    title: 'نظرة عامة والتحليلات',
+    title: 'الصفحة الرئيسية',
     items: [
       { key: 'canViewHome', label: 'الوصول للصفحة الرئيسية (محطة الاستراحة)', short: 'الرئيسية' },
-      { key: 'canViewAnalytics', label: 'عرض نظرة عامة والتحليلات وسجل النشاطات', short: 'نظرة عامة' },
     ],
   },
   {
@@ -226,7 +221,6 @@ function normalizeStaffPerms(raw?: StaffPermissions): StaffPermissions {
   const canSettings = Boolean(src.canManageSettings ?? canPlans);
   return {
     canViewHome: src.canViewHome === undefined ? true : Boolean(src.canViewHome),
-    canViewAnalytics: Boolean(src.canViewAnalytics),
     canManageRestaurants: canPartners,
     canCreatePartner: Boolean(src.canCreatePartner ?? canPartners),
     canEditPartnerPlan: Boolean(src.canEditPartnerPlan || src.canExtendSubscription),

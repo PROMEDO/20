@@ -1048,7 +1048,6 @@ export const DEFAULT_HOME: HomeSettings = {
 };
 
 export const DEFAULT_STAFF_PERMISSIONS: StaffPermissions = {
-  canViewAnalytics: true,
   canViewHome: true,
   canManageFinance: false,
   canManageRestaurants: true,

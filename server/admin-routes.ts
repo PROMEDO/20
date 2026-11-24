@@ -4,9 +4,12 @@
  */
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { Router, type Request, type Response } from 'express';
 import {
   applyChanges,
+  deleteInternalStoreItem,
   deleteRecordPhysicallyFromStore,
   readAll,
   readPrefixFromStore,
@@ -41,7 +44,6 @@ import {
 const PROTECTED_OWNER_ACCOUNT_ID = 'acc_admin_owner';
 
 export interface StaffPermissionsPayload {
-  canViewAnalytics?: boolean;
   canViewHome?: boolean;
   canManageRestaurants?: boolean;
   canCreatePartner?: boolean;
@@ -1704,8 +1706,68 @@ export function createAdminRouter(): Router {
   });
 
   // ============================================================================
-  // 2.6. STORAGE MAINTENANCE: CLEANUP ORPHANED IMAGES & RECORDS
+  // 2.6. STORAGE MAINTENANCE: CLEANUP ORPHANED & UNREFERENCED STORED IMAGES
   // ============================================================================
+  function collectStaticAppAssetReferences(rootDir: string): string {
+    const chunks: string[] = [];
+    const readIfExists = (targetPath: string) => {
+      try {
+        if (fs.existsSync(targetPath) && fs.statSync(targetPath).isFile()) {
+          chunks.push(fs.readFileSync(targetPath, 'utf8'));
+        }
+      } catch {
+        // ignore unreadable static file
+      }
+    };
+    const walkCodeDir = (dirPath: string) => {
+      if (!fs.existsSync(dirPath)) return;
+      for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {
+        const full = path.join(dirPath, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name === 'node_modules' || entry.name === 'dist') continue;
+          walkCodeDir(full);
+        } else if (/\.(ts|tsx|js|jsx|css|html|json|webmanifest)$/i.test(entry.name)) {
+          readIfExists(full);
+        }
+      }
+    };
+    readIfExists(path.join(rootDir, 'index.html'));
+    readIfExists(path.join(rootDir, 'server.ts'));
+    readIfExists(path.join(rootDir, 'public', 'sw.js'));
+    readIfExists(path.join(rootDir, 'public', 'manifest.webmanifest'));
+    walkCodeDir(path.join(rootDir, 'src'));
+    walkCodeDir(path.join(rootDir, 'server'));
+    return chunks.join('\n');
+  }
+
+  function walkDirFiles(baseDir: string, currentDir: string, out: Array<{ absPath: string; relPosix: string; size: number }>) {
+    if (!fs.existsSync(currentDir)) return;
+    for (const entry of fs.readdirSync(currentDir, { withFileTypes: true })) {
+      const resolved = path.resolve(currentDir, entry.name);
+      if (!resolved.startsWith(baseDir + path.sep)) continue;
+      if (entry.isDirectory()) {
+        walkDirFiles(baseDir, resolved, out);
+      } else if (entry.isFile()) {
+        const stat = fs.statSync(resolved);
+        const relPosix = path.relative(baseDir, resolved).split(path.sep).join('/');
+        out.push({ absPath: resolved, relPosix, size: stat.size });
+      }
+    }
+  }
+
+  function removeEmptySubdirs(rootDir: string, currentDir: string) {
+    if (!fs.existsSync(currentDir)) return;
+    for (const entry of fs.readdirSync(currentDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const resolved = path.resolve(currentDir, entry.name);
+      if (!resolved.startsWith(rootDir + path.sep)) continue;
+      removeEmptySubdirs(rootDir, resolved);
+      if (fs.readdirSync(resolved).length === 0) {
+        fs.rmdirSync(resolved);
+      }
+    }
+  }
+
   router.post('/api/maintenance/cleanup-images', requireAdminOrStaff('canRunMaintenance'), async (_req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');
     try {
@@ -1748,15 +1810,93 @@ export function createAdminRouter(): Router {
         }
       }
 
-      await Promise.all(keysToDelete.map((k) => deleteRecordPhysicallyFromStore(k)));
+      const deleteKeySet = new Set(keysToDelete);
+      const liveReferenceChunks: string[] = [];
+      for (const [k, v] of Object.entries(allData)) {
+        if (deleteKeySet.has(k) || k.startsWith('media_files/')) continue;
+        if (v !== null && v !== undefined) {
+          liveReferenceChunks.push(JSON.stringify(v));
+        }
+      }
+      const rootDir = process.cwd();
+      liveReferenceChunks.push(collectStaticAppAssetReferences(rootDir));
+      const referenceCorpus = liveReferenceChunks.join('\n');
+
+      let deletedImageFiles = 0;
+      const mediaIdsToDelete = new Set<string>();
+
+      // 1. Clean unreferenced files inside public/assets/aistudio
+      const aistudioDir = path.resolve(rootDir, 'public', 'assets', 'aistudio');
+      const aistudioFiles: Array<{ absPath: string; relPosix: string; size: number }> = [];
+      walkDirFiles(aistudioDir, aistudioDir, aistudioFiles);
+      for (const file of aistudioFiles) {
+        if (!file.absPath.startsWith(aistudioDir + path.sep)) continue;
+        if (!/\.(png|jpe?g|webp|gif|svg|avif)$/i.test(file.relPosix)) continue;
+        if (!referenceCorpus.includes(file.relPosix)) {
+          fs.unlinkSync(file.absPath);
+          deletedImageFiles += 1;
+          reclaimedBytes += file.size;
+        }
+      }
+
+      // 2. Clean unreferenced files inside public/uploads
+      const uploadsDir = path.resolve(rootDir, 'public', 'uploads');
+      const uploadFiles: Array<{ absPath: string; relPosix: string; size: number }> = [];
+      walkDirFiles(uploadsDir, uploadsDir, uploadFiles);
+      for (const file of uploadFiles) {
+        if (!file.absPath.startsWith(uploadsDir + path.sep)) continue;
+        const publicUrl = `/uploads/${file.relPosix}`;
+        if (!referenceCorpus.includes(publicUrl) && !referenceCorpus.includes(file.relPosix)) {
+          fs.unlinkSync(file.absPath);
+          deletedImageFiles += 1;
+          reclaimedBytes += file.size;
+        }
+      }
+      removeEmptySubdirs(uploadsDir, uploadsDir);
+
+      // 3. Clean unreferenced stored media in data/media and media_files/* KV entries
+      const mediaDir = path.resolve(rootDir, 'data', 'media');
+      const mediaFiles: Array<{ absPath: string; relPosix: string; size: number }> = [];
+      walkDirFiles(mediaDir, mediaDir, mediaFiles);
+      for (const file of mediaFiles) {
+        if (!file.absPath.startsWith(mediaDir + path.sep)) continue;
+        const baseId = file.relPosix.replace(/\.[^.]+$/, '');
+        const apiUrlPrefix = `/api/media/file/${baseId}`;
+        if (!referenceCorpus.includes(apiUrlPrefix)) {
+          fs.unlinkSync(file.absPath);
+          deletedImageFiles += 1;
+          reclaimedBytes += file.size;
+          if (/^[a-zA-Z0-9_-]+$/.test(baseId)) {
+            mediaIdsToDelete.add(baseId);
+          }
+        }
+      }
+
+      for (const key of Object.keys(allData)) {
+        if (!key.startsWith('media_files/')) continue;
+        const fileId = key.slice('media_files/'.length);
+        if (!referenceCorpus.includes(`/api/media/file/${fileId}`)) {
+          mediaIdsToDelete.add(fileId);
+        }
+      }
+
+      await Promise.all([
+        ...keysToDelete.map((k) => deleteRecordPhysicallyFromStore(k)),
+        ...[...mediaIdsToDelete].map((id) => deleteInternalStoreItem(`media_files/${id}`).catch(() => {})),
+      ]);
+
+      const totalRemoved = keysToDelete.length + deletedImageFiles + mediaIdsToDelete.size;
+      const savedKb = (reclaimedBytes / 1024).toFixed(1);
 
       return res.json({
         success: true,
         removedRecords: keysToDelete.length,
+        removedOrphanRecords: keysToDelete.length + mediaIdsToDelete.size,
+        strippedUnreferencedImages: deletedImageFiles,
         reclaimedBytes,
-        message: keysToDelete.length > 0
-          ? `تم تنظيف ${keysToDelete.length} سجل وصور يتيمة غير مرتبطة وتوفير ${(reclaimedBytes / 1024).toFixed(1)} كيلوبايت`
-          : 'قاعدة البيانات نظيفة حالياً ولا توجد صور أو سجلات يتيمة غير مستخدمة.',
+        message: totalRemoved > 0
+          ? `تم تنظيف ${deletedImageFiles} صورة غير مستخدمة و${keysToDelete.length + mediaIdsToDelete.size} سجل يتيم وتوفير ${savedKb} كيلوبايت`
+          : 'لا توجد صور مخزنة أو ملفات غير مهمة للحذف حالياً.',
       });
     } catch (err: unknown) {
       return res.status(500).json({

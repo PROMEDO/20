@@ -857,7 +857,7 @@ app.post('/api/db', async (req, res) => {
         return Boolean(perms.canManageRestaurants);
       }
       if (key.startsWith('orders/') || key.startsWith('loyalty/')) {
-        return Boolean(perms.canManageRestaurants || perms.canViewAnalytics);
+        return Boolean(perms.canManageRestaurants);
       }
       if (key.startsWith('accounts/')) {
         if (isDelete) return Boolean(perms.canDeletePartner && ses.role === 'owner');

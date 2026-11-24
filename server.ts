@@ -510,7 +510,7 @@ function getOwnedPartnerRids(
     }
   }
 
-  // Expand to include any branch belonging to any owned primary restaurant (and parent if ownerRid was a branch)
+  // Expand to include any parent restaurant if ownerRid was a branch, then all child branches in the family
   let changed = true;
   while (changed) {
     changed = false;
@@ -520,6 +520,13 @@ function getOwnedPartnerRids(
       const rec = v as Record<string, unknown> | undefined;
       if (!rec) continue;
       const parentRid = String(rec.parentRid || '').trim();
+      if (parentRid && owned.has(rid) && !owned.has(parentRid)) {
+        const parentRec = allData[`restaurants/${parentRid}`] as Record<string, unknown> | undefined;
+        if (parentRec && parentRec.deleted !== true) {
+          owned.add(parentRid);
+          changed = true;
+        }
+      }
       if (parentRid && owned.has(parentRid) && !owned.has(rid)) {
         owned.add(rid);
         changed = true;

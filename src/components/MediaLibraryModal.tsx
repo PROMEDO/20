@@ -256,7 +256,9 @@ export const MediaLibraryModal: React.FC<MediaLibraryModalProps> = ({
                 />
               </label>
 
-              {items.map((item) => {
+              {[...items]
+                .sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0))
+                .map((item) => {
                 const isSelected = selectedUrl === item.url;
                 return (
                   <div

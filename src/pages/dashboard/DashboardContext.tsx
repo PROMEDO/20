@@ -2157,61 +2157,139 @@ function useDashboardController({
   };
 
   const mediaLibraryItems: MediaLibraryItem[] = useMemo(() => {
-    if (Array.isArray(rest.mediaLibrary)) {
-      return rest.mediaLibrary;
+    const familyMap = new Map<string, Restaurant>();
+    const mainRestCandidate = getItem<Restaurant>(`restaurants/${mainRid}`);
+    if (mainRestCandidate) familyMap.set(mainRestCandidate.id, mainRestCandidate);
+    branchesList.forEach((b) => familyMap.set(b.id, b));
+    if (rest && rest.id) familyMap.set(rest.id, rest);
+
+    const familyRests = Array.from(familyMap.values());
+    const familyRids = new Set<string>(familyRests.map((r) => r.id));
+    familyRids.add(mainRid);
+    familyRids.add(rid);
+
+    const hasInitializedFamilyMedia = familyRests.some((r) => Array.isArray(r.mediaLibrary));
+    const byUrl = new Map<string, MediaLibraryItem>();
+
+    // Read main restaurant library first, then branches, keeping the highest createdAt timestamp
+    const orderedSources: Restaurant[] = [];
+    const mainRec = familyMap.get(mainRid);
+    if (mainRec) orderedSources.push(mainRec);
+    familyRests.forEach((r) => {
+      if (r.id !== mainRid) orderedSources.push(r);
+    });
+
+    orderedSources.forEach((r) => {
+      if (!Array.isArray(r.mediaLibrary)) return;
+      r.mediaLibrary.forEach((entry) => {
+        const cleanUrl = String(entry?.url || '').trim();
+        if (!cleanUrl) return;
+        const entryTs = Number(entry?.createdAt) || 0;
+        const prev = byUrl.get(cleanUrl);
+        if (!prev || entryTs > (Number(prev.createdAt) || 0)) {
+          byUrl.set(cleanUrl, {
+            id: entry?.id || 'media_' + uid(),
+            name: entry?.name || prev?.name || 'صورة',
+            url: cleanUrl,
+            createdAt: entryTs || Number(prev?.createdAt) || 0,
+          });
+        }
+      });
+    });
+
+    if (!hasInitializedFamilyMedia) {
+      const defaultsSet = new Set<string>([
+        DEFAULT_MEDIA_ASSETS.restaurant.logo,
+        DEFAULT_MEDIA_ASSETS.restaurant.banner,
+        DEFAULT_MEDIA_ASSETS.store.logo,
+        DEFAULT_MEDIA_ASSETS.store.banner,
+      ]);
+      getCollection<Category>('cats').forEach((c) => {
+        if (!familyRids.has(c.rid)) return;
+        const url = String(c.img || '').trim();
+        if (url && !defaultsSet.has(url) && !byUrl.has(url)) {
+          byUrl.set(url, { id: `media_cat_${c.id}`, name: c.n || 'صورة قسم', url, createdAt: 0 });
+        }
+      });
+      getCollection<MenuItem>('items').forEach((it) => {
+        if (!familyRids.has(it.rid)) return;
+        const url = String(it.img || '').trim();
+        if (url && !defaultsSet.has(url) && !byUrl.has(url)) {
+          byUrl.set(url, { id: `media_item_${it.id}`, name: it.n || 'صورة صنف', url, createdAt: 0 });
+        }
+      });
     }
-    const defaultsSet = new Set<string>([
-      DEFAULT_MEDIA_ASSETS.restaurant.logo,
-      DEFAULT_MEDIA_ASSETS.restaurant.banner,
-      DEFAULT_MEDIA_ASSETS.store.logo,
-      DEFAULT_MEDIA_ASSETS.store.banner,
-    ]);
-    const seen = new Set<string>();
-    const seeded: MediaLibraryItem[] = [];
-    allCategories.forEach((c) => {
-      const url = String(c.img || '').trim();
-      if (url && !defaultsSet.has(url) && !seen.has(url)) {
-        seen.add(url);
-        seeded.push({ id: `media_cat_${c.id}`, name: c.n || 'صورة قسم', url });
-      }
-    });
-    allItems.forEach((it) => {
-      const url = String(it.img || '').trim();
-      if (url && !defaultsSet.has(url) && !seen.has(url)) {
-        seen.add(url);
-        seeded.push({ id: `media_item_${it.id}`, name: it.n || 'صورة صنف', url });
-      }
-    });
-    return seeded;
-  }, [rest.mediaLibrary, allCategories, allItems]);
+
+    return Array.from(byUrl.values()).sort(
+      (a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0)
+    );
+  }, [rest, mainRid, rid, branchesList, dbRev]);
 
   const appendToMediaLibrary = (entries: MediaLibraryItem[]) => {
     if (entries.length === 0) return;
-    const latestRest = getItem<Restaurant>(`restaurants/${rid}`) || rest;
-    const baseList = Array.isArray(latestRest.mediaLibrary)
-      ? latestRest.mediaLibrary
-      : mediaLibraryItems;
-    const existingUrls = new Set(baseList.map((m) => m.url));
-    const uniqueNew = entries.filter((entry) => !existingUrls.has(entry.url));
-    if (uniqueNew.length === 0) return;
-    const nextList = [...uniqueNew, ...baseList];
-    putItem<Restaurant>(`restaurants/${rid}`, {
-      ...latestRest,
-      mediaLibrary: nextList,
+    const now = Date.now();
+    const byUrl = new Map<string, MediaLibraryItem>();
+
+    // Seed with existing shared family items first
+    mediaLibraryItems.forEach((m) => {
+      const cleanUrl = String(m.url || '').trim();
+      if (!cleanUrl) return;
+      byUrl.set(cleanUrl, {
+        ...m,
+        url: cleanUrl,
+        createdAt: Number(m.createdAt) || 0,
+      });
+    });
+
+    // Apply newly uploaded items with fresh descending timestamps so newest are always on top
+    entries.forEach((entry, idx) => {
+      const cleanUrl = String(entry?.url || '').trim();
+      if (!cleanUrl) return;
+      const ts = Math.max(Number(entry?.createdAt) || 0, now + idx);
+      byUrl.set(cleanUrl, {
+        id: entry?.id || 'media_' + uid(),
+        name: entry?.name || 'image.jpg',
+        url: cleanUrl,
+        createdAt: ts,
+      });
+    });
+
+    const nextList = Array.from(byUrl.values()).sort(
+      (a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0)
+    );
+
+    const putBatch: Record<string, unknown> = {};
+    const targetIds = new Set<string>([mainRid, rid, ...branchesList.map((b) => b.id)]);
+    targetIds.forEach((targetId) => {
+      const targetRec =
+        getItem<Restaurant>(`restaurants/${targetId}`) || (targetId === rid ? rest : undefined);
+      if (targetRec) {
+        putBatch[`restaurants/${targetId}`] = {
+          ...targetRec,
+          mediaLibrary: nextList,
+        };
+      }
+    });
+
+    void putManyAndSync(putBatch).then(() => {
+      onRefresh();
     });
     onRefresh();
   };
 
   const uploadImagesToLibrary = async (files: FileList): Promise<MediaLibraryItem[]> => {
     const added: MediaLibraryItem[] = [];
+    let prevTs = Date.now();
     for (const file of Array.from(files)) {
       try {
         const uploadedUrl = await uploadCompressedImageToUrl(file, 'item');
+        const ts = Math.max(Date.now(), prevTs + 1);
+        prevTs = ts;
         added.push({
           id: 'media_' + uid(),
           name: file.name || 'image.jpg',
           url: uploadedUrl,
-          createdAt: Date.now(),
+          createdAt: ts,
         });
       } catch {
         // skip unreadable file
@@ -2227,13 +2305,11 @@ function useDashboardController({
   };
 
   const removeMediaLibraryItem = (mediaId: string) => {
-    const latestRest = getItem<Restaurant>(`restaurants/${rid}`) || rest;
-    const baseList = Array.isArray(latestRest.mediaLibrary)
-      ? latestRest.mediaLibrary
-      : mediaLibraryItems;
-    const targetItem = baseList.find((m) => m.id === mediaId);
+    const targetItem = mediaLibraryItems.find((m) => m.id === mediaId);
     const deletedUrl = String(targetItem?.url || '').trim();
-    const nextList = baseList.filter((m) => m.id !== mediaId && (!deletedUrl || m.url !== deletedUrl));
+    const nextList = mediaLibraryItems.filter(
+      (m) => m.id !== mediaId && (!deletedUrl || m.url !== deletedUrl)
+    );
 
     const putBatch: Record<string, unknown> = {};
     const allRests = getCollection<Restaurant>('restaurants');
@@ -2242,17 +2318,11 @@ function useDashboardController({
     );
     const relatedRids = new Set(relatedRests.map((r) => r.id));
     relatedRids.add(rid);
+    relatedRids.add(mainRid);
 
     for (const r of relatedRests) {
-      let changed = r.id === rid;
-      const rMedia = Array.isArray(r.mediaLibrary)
-        ? r.mediaLibrary.filter((m) => m.id !== mediaId && (!deletedUrl || m.url !== deletedUrl))
-        : r.id === rid
-        ? nextList
-        : undefined;
-      if (Array.isArray(r.mediaLibrary) && rMedia && rMedia.length !== r.mediaLibrary.length) {
-        changed = true;
-      }
+      let changed = r.id === rid || r.id === mainRid || Array.isArray(r.mediaLibrary);
+      const rMedia = nextList;
 
       let nextLogo = r.logo;
       if (deletedUrl && r.logo === deletedUrl) {
@@ -2286,7 +2356,7 @@ function useDashboardController({
       if (changed) {
         putBatch[`restaurants/${r.id}`] = {
           ...r,
-          ...(rMedia !== undefined ? { mediaLibrary: rMedia } : {}),
+          mediaLibrary: rMedia,
           logo: nextLogo,
           aboutImage: nextAboutImage,
           coverImages: nextCovers,
@@ -2323,6 +2393,7 @@ function useDashboardController({
       }
     }
 
+    const latestRest = getItem<Restaurant>(`restaurants/${rid}`) || rest;
     if (!putBatch[`restaurants/${rid}`]) {
       putBatch[`restaurants/${rid}`] = {
         ...latestRest,

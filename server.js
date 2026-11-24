@@ -8449,6 +8449,13 @@ function getOwnedPartnerRids(allData, ownerRid, ses) {
       const rec = v;
       if (!rec) continue;
       const parentRid = String(rec.parentRid || "").trim();
+      if (parentRid && owned.has(rid) && !owned.has(parentRid)) {
+        const parentRec = allData[`restaurants/${parentRid}`];
+        if (parentRec && parentRec.deleted !== true) {
+          owned.add(parentRid);
+          changed = true;
+        }
+      }
       if (parentRid && owned.has(parentRid) && !owned.has(rid)) {
         owned.add(rid);
         changed = true;

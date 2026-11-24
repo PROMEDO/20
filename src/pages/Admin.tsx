@@ -348,7 +348,9 @@ export const AdminView: React.FC<AdminViewProps> = ({
       wa: cleanWa,
       supportWhatsapp: cleanWa,
       homeThemeMode:
-        site.homeThemeMode === 'dark' || site.homeThemeMode === 'auto' ? site.homeThemeMode : 'light',
+        editSite.homeThemeMode === 'dark' || editSite.homeThemeMode === 'auto'
+          ? editSite.homeThemeMode
+          : 'light',
       adminThemeMode:
         editSite.adminThemeMode === 'dark' || editSite.adminThemeMode === 'auto'
           ? editSite.adminThemeMode
@@ -596,6 +598,40 @@ export const AdminView: React.FC<AdminViewProps> = ({
       session.phone || session.email || 'المدير',
       'تحديث ثيم لوحة تحكم الزبائن',
       `ثيم لوحة التحكم الافتراضي: ${nextMode === 'auto' ? 'حسب جهاز الزبون' : nextMode === 'dark' ? 'داكن' : 'فاتح'}`,
+      'system'
+    );
+    onRefresh();
+    showToast('تم حفظ التغيرات');
+  };
+
+  const handleSelectHomeThemeMode = async (nextMode: 'light' | 'dark' | 'auto') => {
+    if (!isSuperAdmin && !staffPerms.canManageThemeMode && !staffPerms.canManageSettings) {
+      showToast('ليست لديك صلاحية تغيير المظهر');
+      return;
+    }
+    if (siteAutoSaveTimerRef.current !== null) {
+      window.clearTimeout(siteAutoSaveTimerRef.current);
+      siteAutoSaveTimerRef.current = null;
+    }
+    const nextSite: SiteSettings = {
+      ...site,
+      ...editSite,
+      homeThemeMode: nextMode,
+    };
+    const nextPublicTheme: ThemeSettings = buildThemeForMode(nextMode, getTheme());
+    hydratedSiteSigRef.current = JSON.stringify(nextSite);
+    setEditSite(nextSite);
+    setEditTheme(nextPublicTheme);
+    await putManyAndSync({
+      'settings/site': nextSite,
+      'settings/theme': nextPublicTheme,
+    });
+    const resolvedAdminMode = nextSite.adminThemeMode || 'light';
+    applyTheme(buildThemeForMode(resolvedAdminMode, nextPublicTheme));
+    logActivity(
+      session.phone || session.email || 'المدير',
+      'تحديث مظهر الموقع العام',
+      `مظهر الموقع العام: ${nextMode === 'auto' ? 'حسب جهاز الزائر' : nextMode === 'dark' ? 'داكن' : 'فاتح'}`,
       'system'
     );
     onRefresh();
@@ -1484,9 +1520,103 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 {...dashSectionMotion(prefersReducedMotion, 0, true)}
               >
                 <div className="mp-framed-title">
-                  <span>مظهر لوحة الإدارة ولوحة تحكم الزبائن</span>
+                  <span>مظهر الموقع العام ولوحات التحكم</span>
                 </div>
                 <div className="mp-framed-box" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                  {/* 0. Public Site Theme Mode (Home & Auth Pages) */}
+                  {(() => {
+                    const homeMode = editSite.homeThemeMode || 'light';
+                    const deviceIsDark = getSystemPrefersDark();
+                    return (
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '14px 20px',
+                        }}
+                      >
+                        <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+                          <div style={{ fontSize: '13.5px', fontWeight: 800, marginBottom: '4px' }}>
+                            مظهر الموقع العام (الصفحة الرئيسية وصفحات الدخول)
+                          </div>
+                          <div className="muted" style={{ fontSize: '12px', lineHeight: 1.6 }}>
+                            يتحكم في مظهر الموقع العام والصفحة الرئيسية وصفحات الدخول والاشتراك للزوار.
+                          </div>
+                          {homeMode === 'auto' && (
+                            <div style={{ marginTop: '8px' }}>
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                  fontSize: '11.5px',
+                                  fontWeight: 700,
+                                  color: 'var(--brand-ink, #34D399)',
+                                  background: 'var(--mp-glass-control)',
+                                  backdropFilter: 'var(--mp-glass-control-blur)',
+                                  WebkitBackdropFilter: 'var(--mp-glass-control-blur)',
+                                  border: '1px solid var(--mp-glass-border)',
+                                  borderRadius: '999px',
+                                  padding: '4px 11px',
+                                }}
+                              >
+                                {deviceIsDark ? <Moon size={12} /> : <Sun size={12} />}
+                                <span>الوضع المكتشف على جهازك الآن: {deviceIsDark ? 'داكن' : 'فاتح'}</span>
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div
+                          className="mp-seg-group"
+                          role="group"
+                          aria-label="مظهر الموقع العام"
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                            width: 'min(100%, 348px)',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <button
+                            type="button"
+                            disabled={!allowThemePay}
+                            className={`mp-seg-btn${homeMode === 'light' ? ' is-active' : ''}`}
+                            style={{ justifyContent: 'center', width: '100%' }}
+                            onClick={() => void handleSelectHomeThemeMode('light')}
+                          >
+                            <Sun size={14} />
+                            <span>فاتح</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!allowThemePay}
+                            className={`mp-seg-btn${homeMode === 'dark' ? ' is-active' : ''}`}
+                            style={{ justifyContent: 'center', width: '100%' }}
+                            onClick={() => void handleSelectHomeThemeMode('dark')}
+                          >
+                            <Moon size={14} />
+                            <span>داكن</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!allowThemePay}
+                            className={`mp-seg-btn${homeMode === 'auto' ? ' is-active' : ''}`}
+                            style={{ justifyContent: 'center', width: '100%' }}
+                            onClick={() => void handleSelectHomeThemeMode('auto')}
+                          >
+                            <Monitor size={14} />
+                            <span>حسب الجهاز</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  <div style={{ height: '1px', background: 'var(--line)' }} />
+
                   {/* 1. Admin Dashboard Theme */}
                   <div
                     style={{

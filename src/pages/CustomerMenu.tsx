@@ -348,7 +348,7 @@ const MemoTotersItemRow = React.memo<MemoCustomerItemProps>(
     onDecrement,
   }) => (
     <article
-      className={`pm-toters-row ${showUnavailableBadge ? 'unavailable' : ''}`}
+      className={`pm-toters-row ${showUnavailableBadge || unavailable ? 'unavailable is-unavailable' : ''}`}
       onClick={() => onOpenProduct(it)}
     >
       {/* Start (Right in RTL): Title, Description, Price & Subtle Inline Tags */}
@@ -366,19 +366,22 @@ const MemoTotersItemRow = React.memo<MemoCustomerItemProps>(
             </span>
           )}
         </div>
-        {showUnavailableBadge && (
-          <span className="pm-item-unavailable-label">غير متوفر حالياً</span>
-        )}
       </div>
 
       {/* End (Left in RTL): Square Rounded Thumb + Floating Circular + */}
-      <div className="pm-toters-row-thumb">
+      <div className={`pm-toters-row-thumb ${showUnavailableBadge || unavailable ? 'is-unavailable' : ''}`}>
         {it.img ? (
           <img src={it.img} alt={it.n} loading="lazy" decoding="async" referrerPolicy="no-referrer" />
         ) : (
           <div className="pm-toters-thumb-empty">
             <Utensils size={22} />
           </div>
+        )}
+        {(showUnavailableBadge || unavailable) && (
+          <>
+            <div className="pm-unavailable-wash" aria-hidden="true" />
+            <span className="pm-unavailable-pill">غير متوفر</span>
+          </>
         )}
         {!displayOnly && (
           !unavailable && qty > 0 ? (
@@ -408,16 +411,12 @@ const MemoTotersItemRow = React.memo<MemoCustomerItemProps>(
           ) : (
             <button
               type="button"
-              className="pm-toters-plus-btn"
+              className={`pm-toters-plus-btn ${unavailable ? 'is-unavailable-plus' : ''}`}
               disabled={unavailable}
-              aria-label={`أضف للسلة: ${it.n}`}
+              aria-label={unavailable ? `${it.n} غير متوفر` : `أضف للسلة: ${it.n}`}
               onClick={(e) => onQuickAdd(it, e)}
             >
-              {unavailable ? (
-                outOfSchedule ? <Clock size={13} /> : 'نفد'
-              ) : (
-                <Plus size={16} strokeWidth={2.6} />
-              )}
+              <Plus size={16} strokeWidth={2.6} />
             </button>
           )
         )}
@@ -446,11 +445,11 @@ const MemoListItemRow = React.memo<MemoCustomerItemProps>(
     onQuickAdd,
   }) => (
     <article
-      className={`pm-product-row ${showUnavailableBadge ? 'unavailable' : ''}`}
+      className={`pm-product-row ${showUnavailableBadge || unavailable ? 'unavailable is-unavailable' : ''}`}
       onClick={() => onOpenProduct(it)}
     >
       {/* Horizontal rectangular food image */}
-      <div className="pm-product-thumb">
+      <div className={`pm-product-thumb ${showUnavailableBadge || unavailable ? 'is-unavailable' : ''}`}>
         {it.img ? (
           <img src={it.img} alt={it.n} loading="lazy" decoding="async" referrerPolicy="no-referrer" />
         ) : (
@@ -467,7 +466,13 @@ const MemoListItemRow = React.memo<MemoCustomerItemProps>(
             <Utensils size={22} />
           </div>
         )}
-        {!displayOnly && qty > 0 && (
+        {(showUnavailableBadge || unavailable) && (
+          <>
+            <div className="pm-unavailable-wash" aria-hidden="true" />
+            <span className="pm-unavailable-pill is-compact">غير متوفر</span>
+          </>
+        )}
+        {!displayOnly && qty > 0 && !unavailable && (
           <span className="pm-qty-badge tabular-nums">{qty} ×</span>
         )}
       </div>
@@ -524,31 +529,23 @@ const MemoListItemRow = React.memo<MemoCustomerItemProps>(
               </span>
             )}
           </div>
-          {showUnavailableBadge && (
-            <span className="pm-item-unavailable-label">غير متوفر حالياً</span>
-          )}
         </div>
 
         {!displayOnly && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
             <button
               type="button"
-              className="pm-list-add-btn"
+              className={`pm-list-add-btn ${unavailable ? 'is-unavailable-plus' : ''}`}
               disabled={unavailable}
-              aria-label={`أضف للسلة: ${it.n}`}
+              aria-label={unavailable ? `${it.n} غير متوفر` : `أضف للسلة: ${it.n}`}
               onClick={(e) => onQuickAdd(it, e)}
-              style={{
-                width: unavailable ? 'auto' : '32px',
-                padding: unavailable ? '0 8px' : 0,
-                background: brandColor,
-                color: brandInk,
-              }}
+              style={
+                unavailable
+                  ? { width: '32px', padding: 0 }
+                  : { width: '32px', padding: 0, background: brandColor, color: brandInk }
+              }
             >
-              {unavailable ? (
-                outOfSchedule ? <Clock size={14} /> : 'نفد'
-              ) : (
-                <Plus size={16} strokeWidth={2.6} />
-              )}
+              <Plus size={16} strokeWidth={2.6} />
             </button>
           </div>
         )}
@@ -581,10 +578,9 @@ const MemoGridItemCard = React.memo<MemoCustomerItemProps>(
     return (
       <article
         onClick={() => onOpenProduct(it)}
-        className="pm-menu-card"
-        style={showUnavailableBadge ? { opacity: 0.52 } : undefined}
+        className={`pm-menu-card ${showUnavailableBadge || unavailable ? 'unavailable is-unavailable' : ''}`}
       >
-        <div className="pm-menu-card-media">
+        <div className={`pm-menu-card-media ${showUnavailableBadge || unavailable ? 'is-unavailable' : ''}`}>
           {it.img ? (
             <img
               src={it.img}
@@ -606,7 +602,13 @@ const MemoGridItemCard = React.memo<MemoCustomerItemProps>(
               <Utensils size={layout === 'grid4' ? 18 : isCompact ? 22 : 28} />
             </div>
           )}
-          {!displayOnly && qty > 0 && (
+          {(showUnavailableBadge || unavailable) && (
+            <>
+              <div className="pm-unavailable-wash" aria-hidden="true" />
+              <span className={`pm-unavailable-pill ${isCompact ? 'is-compact' : ''}`}>غير متوفر</span>
+            </>
+          )}
+          {!displayOnly && qty > 0 && !unavailable && (
             <span className="pm-qty-badge tabular-nums">{qty} ×</span>
           )}
         </div>
@@ -632,31 +634,19 @@ const MemoGridItemCard = React.memo<MemoCustomerItemProps>(
               <button
                 type="button"
                 disabled={unavailable}
-                aria-label={`أضف للسلة: ${it.n}`}
+                aria-label={unavailable ? `${it.n} غير متوفر` : `أضف للسلة: ${it.n}`}
                 onClick={(e) => onQuickAdd(it, e)}
-                className="pm-menu-card-add"
-                style={{
-                  background: brandColor,
-                  color: brandInk,
-                  width: unavailable ? 'auto' : undefined,
-                  padding: unavailable ? '0 6px' : 0,
-                }}
+                className={`pm-menu-card-add ${unavailable ? 'is-unavailable-plus' : ''}`}
+                style={
+                  unavailable
+                    ? { padding: 0 }
+                    : { background: brandColor, color: brandInk, padding: 0 }
+                }
               >
-                {unavailable ? (
-                  outOfSchedule ? (
-                    <Clock size={isCompact ? 11 : 14} />
-                  ) : (
-                    'نفد'
-                  )
-                ) : (
-                  <Plus size={layout === 'grid4' ? 13 : isCompact ? 14 : 16} strokeWidth={2.6} />
-                )}
+                <Plus size={layout === 'grid4' ? 13 : isCompact ? 14 : 16} strokeWidth={2.6} />
               </button>
             )}
           </div>
-          {showUnavailableBadge && (
-            <span className="pm-item-unavailable-label">غير متوفر حالياً</span>
-          )}
         </div>
       </article>
     );
@@ -1268,8 +1258,10 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
 
   const [cartOpen, setCartOpen] = useState(false);
   const [checkoutStep, setCheckoutStep] = useState<'cart' | 'details' | 'done'>('cart');
-  const [selectedAreaIdx, setSelectedAreaIdx] = useState<number>(0);
+  const [selectedAreaIdx, setSelectedAreaIdx] = useState<number>(-1);
   const [selectedCityIdx, setSelectedCityIdx] = useState<number>(0);
+  const [unlistedAreaSelected, setUnlistedAreaSelected] = useState<boolean>(false);
+  const [checkoutTriedSubmit, setCheckoutTriedSubmit] = useState<boolean>(false);
 
   // Cross-menu saved customer details (auto-filled across all restaurant menus; GPS stays live per visit)
   const readSharedCustomerProfile = () => {
@@ -1314,9 +1306,6 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
   const [customerPhone, setCustomerPhone] = useState(initialSharedProfile.phone);
   const [customerAddress, setCustomerAddress] = useState(initialSharedProfile.address);
   const [customerNotes, setCustomerNotes] = useState(initialSharedProfile.notes);
-  const [profileAutoFilled, setProfileAutoFilled] = useState(() =>
-    Boolean(initialSharedProfile.name || initialSharedProfile.phone || initialSharedProfile.address)
-  );
   const profileSyncTimerRef = useRef<number | null>(null);
   const persistSharedProfile = useCallback(
     (profile: { name: string; phone: string; address: string; notes: string }, syncServerNow = false) => {
@@ -1364,23 +1353,18 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
       .then((data: { profile?: { name?: string; phone?: string; address?: string; notes?: string } | null } | null) => {
         if (!active || !data?.profile) return;
         const p = data.profile;
-        let filledAny = false;
         if (p.name) {
           setCustomerName((prev) => prev || p.name || '');
-          filledAny = true;
         }
         if (p.phone) {
           setCustomerPhone((prev) => prev || p.phone || '');
-          filledAny = true;
         }
         if (p.address) {
           setCustomerAddress((prev) => prev || p.address || '');
-          filledAny = true;
         }
         if (p.notes) {
           setCustomerNotes((prev) => prev || p.notes || '');
         }
-        if (filledAny) setProfileAutoFilled(true);
       })
       .catch(() => {});
     return () => {
@@ -1511,6 +1495,7 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
     total: number;
     items: OrderItem[];
     channel?: 'both' | 'telegram' | 'whatsapp';
+    unlistedArea?: boolean;
   } | null>(null);
 
   // Rating Form State
@@ -1734,8 +1719,9 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
   }, [cart]);
 
   const deliveryZones = rest.deliveryZones || [];
-  const safeAreaIdx = Math.min(Math.max(0, selectedAreaIdx), Math.max(0, deliveryZones.length - 1));
-  const activeZone = deliveryZones[safeAreaIdx];
+  const hasSelectedDeliveryZone =
+    !unlistedAreaSelected && selectedAreaIdx >= 0 && selectedAreaIdx < deliveryZones.length;
+  const activeZone = hasSelectedDeliveryZone ? deliveryZones[selectedAreaIdx] : undefined;
   const zoneCities = activeZone?.cities || [];
   const safeCityIdx = Math.min(Math.max(0, selectedCityIdx), Math.max(0, zoneCities.length - 1));
   const activeCity = zoneCities[safeCityIdx];
@@ -1757,6 +1743,7 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
   const spinFreeDelivery = Boolean(addons.spinWheelPromo?.enabled && spinWonReward?.freeDelivery);
   const qualifiesFreeDelivery =
     orderType === 'delivery' &&
+    !unlistedAreaSelected &&
     ((freeDeliveryEnabled && (freeDeliveryMin === 0 || subtotal >= freeDeliveryMin)) || spinFreeDelivery);
   const effectiveDeliveryFee = qualifiesFreeDelivery
     ? freeDeliveryMaxDiscount > 0 && !spinFreeDelivery
@@ -2234,6 +2221,7 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmittingOrder || isCatalogViewOnly) return;
+    setCheckoutTriedSubmit(true);
     if (!canOrderNow) {
       showToast('مغلق حالياً ولا يستقبل الطلبات');
       return;
@@ -2251,8 +2239,13 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
       return;
     }
 
+    if (orderType === 'delivery' && deliveryZones.length > 0 && !activeZone && !unlistedAreaSelected) {
+      showToast('يرجى اختيار منطقة التوصيل أو الضغط على "منطقتك غير موجودة"');
+      return;
+    }
+
     if (customerName.trim().length < 2) {
-      showToast('يرجى إدخال الاسم للتواصل');
+      showToast('يرجى إدخال الاسم الكامل للتواصل');
       return;
     }
 
@@ -2261,8 +2254,8 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
       return;
     }
 
-    if (orderType === 'delivery' && customerAddress.trim().length < 3) {
-      showToast('يرجى إدخال العنوان التفصيلي للتوصيل');
+    if (orderType === 'delivery' && !gpsCoords && customerAddress.trim().length < 8) {
+      showToast('يرجى كتابة عنوانك التفصيلي بوضوح أو تحديد موقعك عبر GPS');
       return;
     }
 
@@ -2340,15 +2333,21 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
           ? activeMenuDiscount.sourceLabel || 'خصم على الأطباق'
           : undefined;
 
+      const isUnlistedDeliveryArea = orderType === 'delivery' && unlistedAreaSelected;
       const cu = {
         n: customerName.trim(),
         ph: customerPhone.trim(),
         nt: customerNotes.trim(),
         orderType,
-        area: orderType === 'delivery' ? activeZone?.area : undefined,
-        city: orderType === 'delivery' ? activeCity?.name : undefined,
-        deliveryFee: orderType === 'delivery' ? effectiveDeliveryFee : 0,
-        address: orderType === 'delivery' ? customerAddress.trim() : undefined,
+        area:
+          orderType === 'delivery'
+            ? isUnlistedDeliveryArea
+              ? 'منطقة غير مدرجة (يتم تحديد التوصيل والسعر مع الكاشير)'
+              : activeZone?.area
+            : undefined,
+        city: orderType === 'delivery' && !isUnlistedDeliveryArea ? activeCity?.name : undefined,
+        deliveryFee: orderType === 'delivery' && !isUnlistedDeliveryArea ? effectiveDeliveryFee : 0,
+        address: orderType === 'delivery' ? customerAddress.trim() || (gpsCoords ? 'تحديد الموقع عبر GPS' : '') : undefined,
         lat: gpsCoords?.lat,
         lng: gpsCoords?.lng,
         table: tableVal,
@@ -2450,15 +2449,19 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
       lines.push('', ordersPriceLine);
 
       if (orderType === 'delivery') {
-        lines.push(
-          `التوصيل: ${
-            qualifiesFreeDelivery
-              ? spinFreeDelivery
-                ? 'مجاني (مكافأة)'
-                : 'مجاني'
-              : formatNumber(effectiveDeliveryFee)
-          }`
-        );
+        if (isUnlistedDeliveryArea) {
+          lines.push('التوصيل: ⚠️ منطقتي غير موجودة في القائمة — أرجو التحقق من التوصيل وتحديد سعر التوصيل');
+        } else {
+          lines.push(
+            `التوصيل: ${
+              qualifiesFreeDelivery
+                ? spinFreeDelivery
+                  ? 'مجاني (مكافأة)'
+                  : 'مجاني'
+                : formatNumber(effectiveDeliveryFee)
+            }`
+          );
+        }
       }
       if (qualifiesFreeGift && addons.freeGiftThreshold?.giftName) {
         lines.push(`الهدية: ${addons.freeGiftThreshold.giftName}`);
@@ -2466,16 +2469,22 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
       if (addons.cutleryOption?.enabled) {
         lines.push(`أدوات الطعام: ${needCutlery ? 'مطلوبة' : 'غير مطلوبة'}`);
       }
-      lines.push(`المجموع: ${formatNumber(finalTotal)}`);
+      lines.push(
+        isUnlistedDeliveryArea
+          ? `المجموع (قبل التوصيل): ${formatNumber(finalTotal)} — يُحدد سعر التوصيل مع الكاشير`
+          : `المجموع: ${formatNumber(finalTotal)}`
+      );
 
       const customerBlock: string[] = [];
       if (orderType === 'delivery') {
-        const areaFallback =
-          activeZone?.area && activeCity?.name && activeZone.area !== activeCity.name && !activeZone.area.includes(activeCity.name)
-            ? `${activeZone.area} - ${activeCity.name}`
-            : activeZone?.area || activeCity?.name || '';
-        const addrText = customerAddress.trim() || areaFallback;
-        if (addrText) customerBlock.push(`العنوان: ${addrText}`);
+        const areaFallback = isUnlistedDeliveryArea
+          ? 'منطقة غير موجودة في القائمة (تحتاج تحديد سعر التوصيل)'
+          : activeZone?.area && activeCity?.name && activeZone.area !== activeCity.name && !activeZone.area.includes(activeCity.name)
+          ? `${activeZone.area} - ${activeCity.name}`
+          : activeZone?.area || activeCity?.name || '';
+        const addrText = customerAddress.trim();
+        if (areaFallback) customerBlock.push(`المنطقة: ${areaFallback}`);
+        if (addrText) customerBlock.push(`العنوان التفصيلي: ${addrText}`);
       }
       if (cu.n) customerBlock.push(`الزبون: ${cu.n}`);
       if (cu.ph) customerBlock.push(`الهاتف: ${cu.ph}`);
@@ -2498,9 +2507,9 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
         true
       );
 
-      const waUrl = useWhatsapp && targetWaPhone ? waLink(targetWaPhone, lines.join('\n')) : '';
+      const waUrl = (useWhatsapp || isUnlistedDeliveryArea) && targetWaPhone ? waLink(targetWaPhone, lines.join('\n')) : '';
 
-      // Directly trigger WhatsApp in new tab without window.open when WhatsApp channel is active
+      // Directly trigger WhatsApp in new tab without window.open when WhatsApp channel is active or area needs cashier confirmation
       if (waUrl) {
         const a = document.createElement('a');
         a.href = waUrl;
@@ -2532,11 +2541,22 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
         // ignore
       }
 
-      setLastOrderSummary({ id: orderId, orderSeq: resolvedOrderSeq, waUrl, total: finalTotal, items: orderItems, channel: orderChannel });
+      setLastOrderSummary({
+        id: orderId,
+        orderSeq: resolvedOrderSeq,
+        waUrl,
+        total: finalTotal,
+        items: orderItems,
+        channel: orderChannel,
+        unlistedArea: isUnlistedDeliveryArea,
+      });
       setCart([]);
+      setCheckoutTriedSubmit(false);
       setCheckoutStep('done');
       showToast(
-        orderChannel === 'telegram'
+        isUnlistedDeliveryArea
+          ? 'تم تسجيل طلبك — تواصل مع الكاشير عبر الواتساب لتأكيد التوصيل والسعر ✓'
+          : orderChannel === 'telegram'
           ? 'تم إرسال الطلب مباشرة إلى المتجر وتيليجرام ✓'
           : 'تم إرسال الطلب وحفظه في قائمة الطلبات ✓'
       );
@@ -3364,16 +3384,22 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
                     return (
                       <article
                         key={`${heading}_${it.id}`}
-                        className={`pm-toters-shelf-card ${showUnavailableBadge ? 'unavailable' : ''}`}
+                        className={`pm-toters-shelf-card ${showUnavailableBadge || unavailable ? 'unavailable is-unavailable' : ''}`}
                         onClick={() => openProductModal(it)}
                       >
-                        <div className="pm-toters-shelf-thumb">
+                        <div className={`pm-toters-shelf-thumb ${showUnavailableBadge || unavailable ? 'is-unavailable' : ''}`}>
                           {it.img ? (
                             <img src={it.img} alt={it.n} loading="lazy" decoding="async" referrerPolicy="no-referrer" />
                           ) : (
                             <div className="pm-toters-thumb-empty">
                               <Utensils size={24} />
                             </div>
+                          )}
+                          {(showUnavailableBadge || unavailable) && (
+                            <>
+                              <div className="pm-unavailable-wash" aria-hidden="true" />
+                              <span className="pm-unavailable-pill is-compact">غير متوفر</span>
+                            </>
                           )}
                           {!displayOnly && (
                             !unavailable && qty > 0 ? (
@@ -3403,25 +3429,18 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
                             ) : (
                               <button
                                 type="button"
-                                className="pm-toters-plus-btn"
+                                className={`pm-toters-plus-btn ${unavailable ? 'is-unavailable-plus' : ''}`}
                                 disabled={unavailable}
-                                aria-label={`أضف للسلة: ${it.n}`}
+                                aria-label={unavailable ? `${it.n} غير متوفر` : `أضف للسلة: ${it.n}`}
                                 onClick={(e) => quickAddOrOpenModal(it, e)}
                               >
-                                {unavailable ? (
-                                  itemEval?.outOfSchedule ? <Clock size={13} /> : 'نفد'
-                                ) : (
-                                  <Plus size={16} strokeWidth={2.6} />
-                                )}
+                                <Plus size={16} strokeWidth={2.6} />
                               </button>
                             )
                           )}
                         </div>
                         <b className="pm-toters-shelf-title">{it.n}</b>
                         <span className="pm-toters-shelf-price tabular-nums">{priceInfo.main}</span>
-                        {showUnavailableBadge && (
-                          <span className="pm-item-unavailable-label">غير متوفر حالياً</span>
-                        )}
                       </article>
                     );
                   })}
@@ -3994,45 +4013,26 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
 
             <button
               type="button"
-              className="pm-cart-cta"
+              className={`pm-cart-cta ${totalCount === 0 ? 'pm-cart-cta--empty' : ''}`}
               onClick={() => {
+                setCheckoutTriedSubmit(false);
                 setCheckoutStep('cart');
                 setCartOpen(true);
               }}
             >
-              {isToters ? (
-                <>
-                  <span className="pm-toters-dock-badge tabular-nums">
-                    {totalCount > 0 ? totalCount : <ShoppingBag size={16} />}
-                  </span>
-                  <span style={{ fontWeight: 900, fontSize: '15px' }}>
-                    {totalCount > 0 ? 'عرض السلة' : 'سلة الطلبات'}
-                  </span>
-                  <span className="tabular-nums" style={{ fontWeight: 800, fontSize: '14px' }}>
-                    {totalCount > 0 ? fmtMoney(subtotal) : 'افتح السلة'}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <ShoppingBag size={19} />
-                    <span>{totalCount > 0 ? 'عرض السلة' : 'سلة الطلبات'}</span>
-                    <span
-                      className="tabular-nums"
-                      style={{
-                        background: 'rgba(255,255,255,0.22)',
-                        borderRadius: '99px',
-                        padding: '2px 9px',
-                        fontSize: '12.5px',
-                      }}
-                    >
-                      {totalCount}
-                    </span>
-                  </span>
-                  <span className="tabular-nums">
-                    {totalCount > 0 ? `${fmtMoney(subtotal)} ←` : 'افتح السلة ←'}
-                  </span>
-                </>
+              <span className="pm-cart-cta-main">
+                <span className="pm-cart-cta-label">سلة الطلبات</span>
+                <span className="pm-cart-cta-icon" aria-hidden="true">
+                  <ShoppingBag size={17} strokeWidth={2.2} />
+                </span>
+                {totalCount > 0 && (
+                  <span className="pm-cart-cta-count tabular-nums">{totalCount}</span>
+                )}
+              </span>
+              {totalCount > 0 && (
+                <span className="pm-cart-cta-total tabular-nums">
+                  {fmtMoney(subtotal)}
+                </span>
               )}
             </button>
           </div>
@@ -4543,77 +4543,48 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
       {cartOpen && !isCatalogViewOnly && (
         <div className="pm-modal-backdrop" onClick={() => setCartOpen(false)}>
           <motion.div
-            className="pm-sheet"
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              maxHeight: '90vh',
-              padding: 0,
-            }}
+            className="pm-sheet pm-cart-sheet"
             onClick={(e) => e.stopPropagation()}
             {...dashModalMotion(prefersReducedMotion)}
           >
             {/* Fixed Top Header */}
-            <div
-              style={{
-                flexShrink: 0,
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                borderBottom: '1px solid var(--pm-line)',
-                padding: '16px 18px 12px',
-                background: 'var(--pm-card)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="pm-cart-header">
+              <div className="pm-cart-header-title">
                 {checkoutStep === 'details' && (
                   <button
                     type="button"
-                    onClick={() => setCheckoutStep('cart')}
-                    style={{
-                      border: '1px solid var(--pm-line)',
-                      background: 'var(--pm-soft)',
-                      borderRadius: '8px',
-                      padding: '4px 8px',
-                      cursor: 'pointer',
-                      color: 'var(--pm-ink)',
+                    aria-label="الرجوع إلى السلة"
+                    className="pm-cart-icon-circle"
+                    onClick={() => {
+                      setCheckoutTriedSubmit(false);
+                      setCheckoutStep('cart');
                     }}
                   >
-                    <ChevronLeft size={16} style={{ transform: 'rotate(180deg)' }} />
+                    <ChevronLeft size={18} style={{ transform: 'rotate(180deg)' }} />
                   </button>
                 )}
-                <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 900, color: 'var(--pm-ink)' }}>
+                <h2 style={{ margin: 0, fontSize: '17.5px', fontWeight: 900, color: 'var(--pm-ink)' }}>
                   {checkoutStep === 'done'
                     ? 'تم تأكيد طلبك'
                     : checkoutStep === 'details'
-                    ? 'بيانات التوصيل والاستلام'
-                    : isToters
-                    ? 'سلتي'
-                    : `سلة الطلبات (${totalCount})`}
+                    ? 'إكمال بيانات الطلب'
+                    : totalCount > 0
+                    ? `سلة الطلبات (${totalCount})`
+                    : 'سلة الطلبات'}
                 </h2>
               </div>
               <button
                 type="button"
+                aria-label="إغلاق السلة"
+                className="pm-cart-icon-circle"
                 onClick={() => setCartOpen(false)}
-                style={{
-                  border: '1px solid var(--pm-line)',
-                  background: 'var(--pm-soft)',
-                  width: '34px',
-                  height: '34px',
-                  borderRadius: '50%',
-                  display: 'grid',
-                  placeItems: 'center',
-                  cursor: 'pointer',
-                  color: 'var(--pm-ink)',
-                }}
               >
                 <X size={18} />
               </button>
             </div>
 
             {checkoutStep === 'done' && lastOrderSummary ? (
-              <div style={{ flex: 1, overflowY: 'auto', padding: '18px 18px 24px', textAlign: 'center' }}>
+              <div className="pm-cart-scroll" style={{ padding: '20px 18px 26px', textAlign: 'center' }}>
                 <div
                   style={{
                     width: '62px',
@@ -4632,8 +4603,10 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
                 <h3 style={{ margin: '0 0 6px', fontSize: '20px', fontWeight: 800, color: 'var(--pm-ink)' }}>
                   تم إرسال طلبك #{lastOrderSummary.orderSeq || lastOrderSummary.id.slice(-5)} بنجاح!
                 </h3>
-                <p style={{ margin: '0 0 18px', fontSize: '13.5px', color: 'var(--pm-muted)' }}>
-                  {lastOrderSummary.channel === 'telegram' || !lastOrderSummary.waUrl
+                <p style={{ margin: '0 0 18px', fontSize: '13.5px', color: 'var(--pm-muted)', lineHeight: 1.55 }}>
+                  {lastOrderSummary.unlistedArea
+                    ? 'تم تسجيل طلبك، يرجى التواصل مع الكاشير عبر الواتساب الآن للتحقق من التوصيل لمنطقتك وتحديد سعر التوصيل.'
+                    : lastOrderSummary.channel === 'telegram' || !lastOrderSummary.waUrl
                     ? 'تم تسجيل طلبك وإرساله مباشرة إلى المتجر وتيليجرام بنجاح.'
                     : `تم تسجيل طلبك في لوحة تحكم ${isEstore ? 'المتجر' : 'المطعم'}، ويمكنك إعادة فتح رسالة الواتساب في أي وقت.`}
                 </p>
@@ -4671,14 +4644,14 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
                       color: accentText,
                     }}
                   >
-                    <span>الإجمالي النهائي</span>
+                    <span>{lastOrderSummary.unlistedArea ? 'إجمالي الطلبات (قبل التوصيل)' : 'الإجمالي النهائي'}</span>
                     <span className="tabular-nums">
                       {formatNumber(lastOrderSummary.total)} {currency}
                     </span>
                   </div>
                 </div>
 
-                {lastOrderSummary.waUrl && lastOrderSummary.channel !== 'telegram' && (
+                {lastOrderSummary.waUrl && (lastOrderSummary.channel !== 'telegram' || lastOrderSummary.unlistedArea) && (
                   <a
                     href={lastOrderSummary.waUrl}
                     target="_blank"
@@ -4689,18 +4662,23 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
                       justifyContent: 'center',
                       gap: '8px',
                       width: '100%',
+                      minHeight: '48px',
                       background: '#16a34a',
                       color: '#fff',
                       borderRadius: '14px',
                       padding: '13px 16px',
                       fontWeight: 800,
-                      fontSize: '15px',
+                      fontSize: '14.5px',
                       marginBottom: '10px',
                       textDecoration: 'none',
                     }}
                   >
                     <MessageCircle size={19} />
-                    <span>فتح محادثة الواتساب</span>
+                    <span>
+                      {lastOrderSummary.unlistedArea
+                        ? 'تواصل مع الكاشير عبر الواتساب لتحديد التوصيل'
+                        : 'فتح محادثة الواتساب'}
+                    </span>
                   </a>
                 )}
 
@@ -4780,128 +4758,7 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
             ) : checkoutStep === 'cart' ? (
               <>
                 {/* Scrollable Cart Body */}
-                <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px' }}>
-                  {/* Order Type quick switcher inside cart */}
-                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${enabledTypes.length}, 1fr)`, gap: '6px', marginBottom: '14px' }}>
-                    {enabledTypes.map((typeItem) => {
-                      const active = orderType === typeItem;
-                      return (
-                        <button
-                          key={typeItem}
-                          type="button"
-                          onClick={() => setOrderType(typeItem)}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '5px',
-                            padding: '10px 6px',
-                            borderRadius: '11px',
-                            border: active ? '1.5px solid var(--pm-brand)' : '1px solid var(--pm-line)',
-                            background: active ? brandColor : 'var(--pm-soft)',
-                            color: active ? brandInk : 'var(--pm-muted)',
-                            fontSize: '12.5px',
-                            fontWeight: 800,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <span style={{ color: active ? brandInk : 'var(--pm-muted)', display: 'inline-flex' }}>
-                            {ORDER_TYPE_META[typeItem].icon}
-                          </span>
-                          <span>{ORDER_TYPE_META[typeItem].label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Delivery Area & City selector if configured */}
-                  {orderType === 'delivery' && deliveryZones.length > 0 && (
-                    <div
-                      style={{
-                        background: 'var(--pm-soft)',
-                        border: '1px solid var(--pm-line)',
-                        borderRadius: '12px',
-                        padding: '10px 12px',
-                        marginBottom: '14px',
-                      }}
-                    >
-                      <div style={{ fontSize: '12.5px', fontWeight: 800, marginBottom: '8px', color: 'var(--pm-ink)' }}>
-                        اختر منطقة التوصيل:
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: hasMultipleSubCities ? '1fr 1fr' : '1fr', gap: '8px' }}>
-                        <AppSelect
-                          title="اختر منطقة التوصيل"
-                          variant="compact"
-                          value={String(safeAreaIdx)}
-                          onChange={(val) => {
-                            setSelectedAreaIdx(Number(val));
-                            setSelectedCityIdx(0);
-                          }}
-                          options={deliveryZones.map((z, idx) => {
-                            const flatFee = z.fee ?? z.cities?.[0]?.fee ?? 0;
-                            const showFlatFee = !z.cities || z.cities.length <= 1;
-                            return {
-                              value: String(idx),
-                              label: String(z.area || ''),
-                              hint: showFlatFee ? `${formatNumber(flatFee)} ${currency}` : undefined,
-                            };
-                          })}
-                          style={{
-                            background: 'var(--pm-card)',
-                            color: 'var(--pm-ink)',
-                            border: '1px solid var(--pm-line)',
-                            borderRadius: '10px',
-                          }}
-                        />
-
-                        {hasMultipleSubCities && (
-                          <AppSelect
-                            title="اختر الحي / المدينة"
-                            variant="compact"
-                            value={String(safeCityIdx)}
-                            onChange={(val) => setSelectedCityIdx(Number(val))}
-                            options={zoneCities.map((ct, idx) => ({
-                              value: String(idx),
-                              label: ct.name,
-                              hint: `${formatNumber(ct.fee)} ${currency}`,
-                            }))}
-                            style={{
-                              background: 'var(--pm-card)',
-                              color: 'var(--pm-ink)',
-                              border: '1px solid var(--pm-line)',
-                              borderRadius: '10px',
-                            }}
-                          />
-                        )}
-                      </div>
-                      {activeCity?.eta && (
-                        <div style={{ fontSize: '11.5px', color: 'var(--pm-muted)', marginTop: '6px' }}>
-                          ⏱ مدة التوصيل المتوقعة: {activeCity.eta}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Toters Store Identity Card inside Cart Step 1 */}
-                  {isToters && (
-                    <div className="pm-toters-cart-store-card">
-                      <div className="pm-toters-cart-store-logo">
-                        {rest.logo ? (
-                          <img src={rest.logo} alt={rest.n} loading="lazy" decoding="async" referrerPolicy="no-referrer" />
-                        ) : (
-                          <span>{(rest.n || 'M').slice(0, 2)}</span>
-                        )}
-                      </div>
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <b style={{ fontSize: '15px', fontWeight: 900, color: 'var(--pm-ink)', display: 'block' }}>
-                          {rest.n}
-                        </b>
-                        <span style={{ fontSize: '12px', color: 'var(--pm-muted)', fontWeight: 600 }}>
-                          {activeCity?.eta || '30 - 45 دقيقة'}
-                        </span>
-                      </div>
-                    </div>
-                  )}
+                <div className="pm-cart-scroll">
 
                   {isToters && addons.loyaltyPoints?.enabled && (
                     <div className="pm-toters-cart-loyalty-card">
@@ -5186,26 +5043,27 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
                   <button
                     type="button"
                     onClick={() => setCartOpen(false)}
-                    style={{
-                      width: '100%',
-                      border: '1.5px dashed var(--pm-line)',
-                      borderRadius: '12px',
-                      background: 'rgba(16, 185, 129, 0.08)',
-                      color: accentText,
-                      padding: '10px',
-                      fontSize: '13px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      marginBottom: '12px',
-                    }}
+                    className="pm-cart-browse-btn"
                   >
                     <Plus size={16} />
                     <span>تصفح الأقسام وإضافة أصناف أخرى</span>
                   </button>
+
+                  {/* General Order Note Box right beneath added items & add-more button */}
+                  <div className="pm-cart-note-card">
+                    <label htmlFor="pm-order-general-note" className="pm-cart-note-label">
+                      <MessageCircle size={15} style={{ color: accentText, flexShrink: 0 }} />
+                      <span>ملاحظة على الطلب (اختياري)</span>
+                    </label>
+                    <textarea
+                      id="pm-order-general-note"
+                      rows={2}
+                      className="pm-cart-note-textarea"
+                      value={customerNotes}
+                      onChange={(e) => setCustomerNotes(e.target.value)}
+                      placeholder="اكتب أي ملاحظة على الطلب أو التوصيل (مثال: بدون بصل، صوص جانبي، الاتصال عند الوصول...)"
+                    />
+                  </div>
 
                   {/* Free Delivery Progress inside Cart */}
                   {addons.freeDeliveryProgress?.enabled && freeDeliveryMin > 0 && orderType === 'delivery' && (
@@ -5398,7 +5256,15 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
                     {orderType === 'delivery' && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                         <span style={{ color: 'var(--pm-muted)' }}>رسوم التوصيل</span>
-                        {qualifiesFreeDelivery ? (
+                        {unlistedAreaSelected ? (
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: accentText }}>
+                            تُحدد عبر الكاشير
+                          </span>
+                        ) : deliveryZones.length > 0 && !activeZone ? (
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--pm-muted)' }}>
+                            تُحدد في الخطوة التالية
+                          </span>
+                        ) : qualifiesFreeDelivery ? (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                             {rawDeliveryFee > 0 && (
                               <span style={{ textDecoration: 'line-through', color: 'var(--pm-muted)' }}>
@@ -5520,35 +5386,8 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
 
                 </div>
 
-                {/* Sticky Pinned Bottom Footer — Always Visible When Scrolling Cart */}
-                <div
-                  style={{
-                    flexShrink: 0,
-                    padding: '12px 18px 16px',
-                    borderTop: isToters ? '1.5px dashed var(--pm-line)' : '1px solid var(--pm-line)',
-                    background: 'var(--pm-card)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px',
-                  }}
-                >
-                  {isToters && (
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        paddingBottom: '4px',
-                        fontSize: '15px',
-                        fontWeight: 900,
-                      }}
-                    >
-                      <span style={{ color: 'var(--pm-ink)' }}>المجموع الجزئي</span>
-                      <span className="tabular-nums" style={{ color: 'var(--pm-ink)' }}>
-                        {fmtMoney(finalTotal)}
-                      </span>
-                    </div>
-                  )}
+                {/* Sticky Pinned Bottom Footer */}
+                <div className="pm-cart-footer">
                   <button
                     type="button"
                     onClick={() => {
@@ -5566,130 +5405,199 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
                         showToast(`الحد الأعلى للطلب هو ${formatNumber(minOrderMaxAmount)} ${currency}`);
                         return;
                       }
+                      setCheckoutTriedSubmit(false);
                       setCheckoutStep('details');
                     }}
-                    style={{
-                      width: '100%',
-                      border: orderLimitBlocked ? '1px solid rgba(148, 163, 184, 0.3)' : '1px solid color-mix(in srgb, var(--pm-brand) 45%, transparent)',
-                      borderRadius: '14px',
-                      background: orderLimitBlocked ? '#64748B' : brandColor,
-                      color: orderLimitBlocked ? '#ffffff' : brandInk,
-                      padding: '13px 16px',
-                      fontSize: '15px',
-                      fontWeight: 900,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: isToters ? 'space-between' : 'center',
-                    }}
+                    className={`pm-cart-complete-btn ${orderLimitBlocked ? 'blocked' : ''}`}
                   >
-                    <span>{isToters ? 'إتمام الشراء' : 'متابعة الطلب'}</span>
-                    {isToters && (
-                      <span className="tabular-nums" style={{ fontSize: '14px', fontWeight: 800 }}>
-                        {fmtMoney(finalTotal)}
-                      </span>
-                    )}
+                    <span>اكمل الطلب</span>
+                    <span className="tabular-nums" style={{ fontSize: '14px', fontWeight: 800 }}>
+                      {fmtMoney(finalTotal)}
+                    </span>
                   </button>
-                  {isToters && (
-                    <button
-                      type="button"
-                      onClick={() => setCartOpen(false)}
-                      style={{
-                        width: '100%',
-                        border: 'none',
-                        borderRadius: '14px',
-                        background: 'var(--pm-soft)',
-                        color: 'var(--pm-ink)',
-                        padding: '12px 16px',
-                        fontSize: '14px',
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      أضف المزيد
-                    </button>
-                  )}
                 </div>
               </>
             ) : (
-              /* STEP 2: CUSTOMER & DELIVERY / TABLE DETAILS */
+              /* STEP 2: MANDATORY DELIVERY ZONE, CUSTOMER INFO & ADDRESS / GPS */
               <form
                 onSubmit={handleSubmitOrder}
-                style={{ flex: 1, overflowY: 'auto', padding: '16px 18px 24px' }}
+                noValidate
+                className="pm-cart-scroll"
+                style={{ paddingBottom: 'calc(22px + env(safe-area-inset-bottom, 0px))' }}
               >
-                {profileAutoFilled && (
+                {/* 1. Mandatory Delivery Zone Selector or Unlisted Area -> WhatsApp Cashier */}
+                {orderType === 'delivery' && deliveryZones.length > 0 && (
                   <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '8px',
-                      padding: '8px 12px',
-                      borderRadius: '11px',
-                      background: 'rgba(16, 185, 129, 0.12)',
-                      border: '1px solid rgba(16, 185, 129, 0.3)',
-                      color: isLightMenu ? '#047857' : '#6EE7B7',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      marginBottom: '12px',
-                    }}
+                    className={`pm-checkout-section ${
+                      checkoutTriedSubmit && !activeZone && !unlistedAreaSelected ? 'has-error' : ''
+                    }`}
                   >
-                    <span>تم تعبئة معلوماتك المحفوظة تلقائياً ✓</span>
-                    {orderType === 'delivery' && !gpsCoords && (
-                      <span style={{ opacity: 0.9 }}>حدد GPS لموقعك الآن</span>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '8px',
+                        marginBottom: '10px',
+                      }}
+                    >
+                      <span style={{ fontSize: '13.5px', fontWeight: 900, color: 'var(--pm-ink)' }}>
+                        اختر منطقة التوصيل <span style={{ color: '#f87171' }}>*</span>
+                      </span>
+                      {activeZone && !unlistedAreaSelected && (
+                        <span style={{ fontSize: '11.5px', fontWeight: 800, color: accentText }}>
+                          تم الاختيار ✓
+                        </span>
+                      )}
+                      {unlistedAreaSelected && (
+                        <span style={{ fontSize: '11.5px', fontWeight: 800, color: accentText }}>
+                          تأكيد عبر الواتساب ✓
+                        </span>
+                      )}
+                    </div>
+
+                    <div className={`pm-zone-list ${deliveryZones.length > 3 ? 'two-col' : ''}`}>
+                      {deliveryZones.map((z, idx) => {
+                        const selected = !unlistedAreaSelected && selectedAreaIdx === idx;
+                        const flatFee = z.fee ?? z.cities?.[0]?.fee ?? 0;
+                        const hasSub = Boolean(z.cities && z.cities.length > 1);
+                        return (
+                          <button
+                            key={`${z.area}-${idx}`}
+                            type="button"
+                            className={`pm-zone-btn ${selected ? 'selected' : ''}`}
+                            onClick={() => {
+                              setSelectedAreaIdx(idx);
+                              setSelectedCityIdx(0);
+                              setUnlistedAreaSelected(false);
+                            }}
+                          >
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
+                              <span
+                                style={{
+                                  width: '18px',
+                                  height: '18px',
+                                  borderRadius: '50%',
+                                  border: selected ? '5px solid var(--pm-brand)' : '1.5px solid var(--pm-muted)',
+                                  background: 'var(--pm-card)',
+                                  flexShrink: 0,
+                                }}
+                              />
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {z.area}
+                              </span>
+                            </span>
+                            <span className="tabular-nums" style={{ fontSize: '12px', fontWeight: 800, color: accentText, flexShrink: 0 }}>
+                              {hasSub ? 'أحياء متعددة' : flatFee > 0 ? fmtMoney(flatFee) : 'مجاني'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {activeZone && !unlistedAreaSelected && hasMultipleSubCities && (
+                      <div style={{ marginTop: '10px' }}>
+                        <label style={{ display: 'block', fontSize: '12px', fontWeight: 800, color: 'var(--pm-muted)', marginBottom: '5px' }}>
+                          اختر الحي / المدينة ضمن {activeZone.area}
+                        </label>
+                        <AppSelect
+                          title="اختر الحي / المدينة"
+                          variant="compact"
+                          value={String(safeCityIdx)}
+                          onChange={(val) => setSelectedCityIdx(Number(val))}
+                          options={zoneCities.map((ct, idx) => ({
+                            value: String(idx),
+                            label: ct.name,
+                            hint: ct.fee > 0 ? fmtMoney(ct.fee) : 'مجاني',
+                          }))}
+                          style={{
+                            background: 'var(--pm-card)',
+                            color: 'var(--pm-ink)',
+                            border: '1px solid var(--pm-line)',
+                            borderRadius: '11px',
+                          }}
+                        />
+                      </div>
+                    )}
+
+                    {activeZone && !unlistedAreaSelected && activeCity?.eta && (
+                      <div style={{ fontSize: '11.5px', color: 'var(--pm-muted)', marginTop: '8px', fontWeight: 600 }}>
+                        مدة التوصيل المتوقعة: {activeCity.eta}
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      className={`pm-zone-unlisted-btn ${unlistedAreaSelected ? 'selected' : ''}`}
+                      onClick={() => {
+                        setUnlistedAreaSelected(true);
+                        setSelectedAreaIdx(-1);
+                        setSelectedCityIdx(0);
+                      }}
+                    >
+                      <span>
+                        منطقتك غير موجودة؟ أكمل الطلب وتواصل مع الكاشير عبر الواتساب للتحقق من التوصيل لك وتحديد سعر التوصيل
+                      </span>
+                      <MessageCircle size={18} style={{ color: accentText, flexShrink: 0 }} />
+                    </button>
+
+                    {unlistedAreaSelected && (
+                      <div
+                        style={{
+                          marginTop: '8px',
+                          padding: '8px 10px',
+                          borderRadius: '10px',
+                          background: 'color-mix(in srgb, var(--pm-brand) 10%, transparent)',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          color: 'var(--pm-ink)',
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        سيتم تسجيل طلبك وفتح محادثة الواتساب مع الكاشير مباشرة للتحقق من إمكانية التوصيل وتحديد السعر المناسب لك.
+                      </div>
+                    )}
+
+                    {checkoutTriedSubmit && !activeZone && !unlistedAreaSelected && (
+                      <div style={{ marginTop: '8px', fontSize: '12px', fontWeight: 700, color: '#f87171' }}>
+                        يرجى اختيار منطقة التوصيل من القائمة أو الضغط على خيار منطقتك غير موجودة.
+                      </div>
                     )}
                   </div>
                 )}
-                <div style={{ marginBottom: '14px' }}>
+
+                {/* 2. Customer Name & Phone */}
+                <div style={{ marginBottom: '12px' }}>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: 'var(--pm-ink)', marginBottom: '6px' }}>
-                    الاسم <span style={{ color: '#f87171' }}>*</span>
+                    الاسم الكامل <span style={{ color: '#f87171' }}>*</span>
                   </label>
                   <input
                     type="text"
+                    className="pm-checkout-input"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    placeholder="اكتب اسمك الكامل للتواصل"
+                    placeholder="اكتب اسمك الكامل"
                     required
-                    style={{
-                      width: '100%',
-                      padding: '11px 14px',
-                      borderRadius: '12px',
-                      border: '1px solid var(--pm-line)',
-                      background: 'var(--pm-soft)',
-                      color: 'var(--pm-ink)',
-                      fontSize: '14px',
-                      fontWeight: 600,
-                      outline: 'none',
-                    }}
                   />
                 </div>
 
                 <div style={{ marginBottom: '14px' }}>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: 'var(--pm-ink)', marginBottom: '6px' }}>
-                    {orderChannel === 'telegram'
+                    {orderChannel === 'telegram' && !unlistedAreaSelected
                       ? 'رقم الهاتف للتواصل'
                       : 'رقم الهاتف / الواتساب'}{' '}
                     <span style={{ color: '#f87171' }}>*</span>
                   </label>
                   <input
                     type="tel"
+                    inputMode="tel"
                     dir="ltr"
+                    className="pm-checkout-input"
                     value={customerPhone}
                     onChange={(e) => setCustomerPhone(e.target.value)}
                     placeholder="07XXXXXXXXX"
                     required
-                    style={{
-                      width: '100%',
-                      padding: '11px 14px',
-                      borderRadius: '12px',
-                      border: '1px solid var(--pm-line)',
-                      background: 'var(--pm-soft)',
-                      color: 'var(--pm-ink)',
-                      fontSize: '14px',
-                      fontWeight: 600,
-                      outline: 'none',
-                      textAlign: 'left',
-                    }}
+                    style={{ textAlign: 'left' }}
                   />
                 </div>
 
@@ -5717,51 +5625,67 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
                   </div>
                 )}
 
+                {/* 3. Mandatory Detailed Address OR GPS Location */}
                 {orderType === 'delivery' && (
-                  <div style={{ marginBottom: '14px' }}>
-                    <div style={{ marginBottom: '14px' }}>
-                      <label style={{ display: 'block', fontSize: '13px', fontWeight: 800, color: 'var(--pm-ink)', marginBottom: '6px' }}>
-                        العنوان التفصيلي <span style={{ color: '#f87171' }}>*</span>
+                  <div
+                    className={`pm-checkout-section ${
+                      checkoutTriedSubmit && !gpsCoords && customerAddress.trim().length < 8 ? 'has-error' : ''
+                    }`}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '8px',
+                        marginBottom: '6px',
+                      }}
+                    >
+                      <label htmlFor="pm-checkout-address" style={{ fontSize: '13.5px', fontWeight: 900, color: 'var(--pm-ink)' }}>
+                        العنوان التفصيلي أو تحديد الموقع عبر GPS <span style={{ color: '#f87171' }}>*</span>
                       </label>
-                      <textarea
-                        rows={2}
-                        value={customerAddress}
-                        onChange={(e) => setCustomerAddress(e.target.value)}
-                        placeholder="اكتب اسم المنطقة، الشارع، رقم المبنى، وأقرب نقطة دالة للتوصيل..."
-                        required
-                        style={{
-                          width: '100%',
-                          padding: '11px 14px',
-                          borderRadius: '12px',
-                          border: '1px solid var(--pm-line)',
-                          background: 'var(--pm-soft)',
-                          color: 'var(--pm-ink)',
-                          fontSize: '13.5px',
-                          fontWeight: 600,
-                          outline: 'none',
-                          resize: 'none',
-                          fontFamily: 'inherit',
-                        }}
-                      />
+                      {(gpsCoords || customerAddress.trim().length >= 8) && (
+                        <span style={{ fontSize: '11.5px', fontWeight: 800, color: accentText }}>
+                          مكتمل ✓
+                        </span>
+                      )}
                     </div>
+                    <p style={{ margin: '0 0 10px', fontSize: '12px', color: 'var(--pm-muted)', lineHeight: 1.45 }}>
+                      مطلوب: اكتب عنوانك التفصيلي بوضوح (المنطقة، الشارع، أقرب نقطة دالة) أو حدد موقعك عبر GPS.
+                    </p>
+
+                    <textarea
+                      id="pm-checkout-address"
+                      rows={2}
+                      className="pm-checkout-input"
+                      value={customerAddress}
+                      onChange={(e) => setCustomerAddress(e.target.value)}
+                      placeholder="اكتب المنطقة، الشارع، رقم المبنى/الدار، وأقرب نقطة دالة..."
+                      style={{
+                        minHeight: '72px',
+                        resize: 'vertical',
+                        fontFamily: 'inherit',
+                        marginBottom: '10px',
+                        background: 'var(--pm-card)',
+                      }}
+                    />
 
                     <div
                       style={{
-                        background: gpsCoords ? 'rgba(16, 185, 129, 0.14)' : 'var(--pm-soft)',
+                        background: gpsCoords ? 'rgba(16, 185, 129, 0.14)' : 'var(--pm-card)',
                         border: gpsCoords ? '1.5px solid #34D399' : '1.5px dashed var(--pm-line)',
-                        borderRadius: '14px',
-                        padding: '12px 14px',
-                        marginBottom: '14px',
+                        borderRadius: '13px',
+                        padding: '11px 12px',
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13.5px', fontWeight: 800, color: gpsCoords ? (isLightMenu ? '#047857' : '#34D399') : 'var(--pm-ink)' }}>
-                          <MapPin size={17} style={{ color: gpsCoords ? (isLightMenu ? '#059669' : '#34D399') : accentText }} />
-                          <span>تحديد موقعك على خرائط جوجل</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', fontWeight: 800, color: gpsCoords ? (isLightMenu ? '#047857' : '#34D399') : 'var(--pm-ink)' }}>
+                          <MapPin size={16} style={{ color: gpsCoords ? (isLightMenu ? '#059669' : '#34D399') : accentText }} />
+                          <span>تحديد الموقع عبر GPS</span>
                         </div>
                         {gpsCoords && (
-                          <span style={{ fontSize: '11.5px', color: isLightMenu ? '#047857' : '#34D399', fontWeight: 800, background: 'rgba(16, 185, 129, 0.2)', padding: '2px 8px', borderRadius: '99px' }}>
-                            تم الحفظ ✓
+                          <span style={{ fontSize: '11.5px', color: isLightMenu ? '#047857' : '#34D399', fontWeight: 800 }}>
+                            تم تحديد الموقع ✓
                           </span>
                         )}
                       </div>
@@ -5772,19 +5696,20 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
                         disabled={gpsLoading}
                         style={{
                           width: '100%',
+                          minHeight: '44px',
                           padding: '10px 14px',
                           borderRadius: '11px',
                           border: '1px solid color-mix(in srgb, var(--pm-brand) 45%, transparent)',
                           background: gpsCoords ? '#059669' : brandColor,
                           color: gpsCoords ? '#ffffff' : brandInk,
                           fontSize: '13px',
-                          fontWeight: 700,
+                          fontWeight: 800,
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           gap: '7px',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                          touchAction: 'manipulation',
                         }}
                       >
                         <MapPin size={15} />
@@ -5793,13 +5718,13 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
                             ? 'جاري تحديد موقعك الجغرافي...'
                             : gpsCoords
                             ? 'تحديث إحداثيات موقعي الحالي'
-                            : 'تحديد موقعي بدقة على الخريطة (GPS)'}
+                            : 'تحديد موقعي الحالي (GPS)'}
                         </span>
                       </button>
 
                       {gpsCoords && (
                         <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', fontSize: '12px', color: isLightMenu ? '#047857' : '#6EE7B7' }}>
-                          <span>الإحداثيات: {gpsCoords.lat}, {gpsCoords.lng}</span>
+                          <span className="tabular-nums">الإحداثيات: {gpsCoords.lat}, {gpsCoords.lng}</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <a
                               href={`https://www.google.com/maps?q=${gpsCoords.lat},${gpsCoords.lng}`}
@@ -5821,6 +5746,12 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
                         </div>
                       )}
                     </div>
+
+                    {checkoutTriedSubmit && !gpsCoords && customerAddress.trim().length < 8 && (
+                      <div style={{ marginTop: '8px', fontSize: '12px', fontWeight: 700, color: '#f87171' }}>
+                        يجب كتابة عنوان تفصيلي (8 أحرف على الأقل) أو تحديد موقعك عبر GPS قبل إرسال الطلب.
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -5892,34 +5823,25 @@ const PublicMenuContent: React.FC<PublicMenuContentProps> = ({
                   </div>
                 )}
 
-                <label className="f" style={{ color: 'var(--pm-ink)' }}>
-                  ملاحظات إضافية (اختياري)
-                  <input
-                    value={customerNotes}
-                    onChange={(e) => setCustomerNotes(e.target.value)}
-                    placeholder="بدون بصل، صوص جانبي، إلخ..."
-                  />
-                </label>
-
                 <button
                   type="submit"
                   disabled={isSubmittingOrder}
+                  className="pm-cart-complete-btn"
                   style={{
-                    width: '100%',
-                    border: '1px solid rgba(52, 211, 153, 0.4)',
-                    borderRadius: '14px',
-                    background: orderChannel === 'telegram' ? '#0088cc' : '#16a34a',
-                    color: '#fff',
-                    padding: '14px',
-                    fontSize: '15px',
-                    fontWeight: 800,
+                    justifyContent: 'center',
+                    background: orderChannel === 'telegram' && !unlistedAreaSelected ? '#0088cc' : brandColor,
+                    color: orderChannel === 'telegram' && !unlistedAreaSelected ? '#ffffff' : brandInk,
                     cursor: isSubmittingOrder ? 'wait' : 'pointer',
                     opacity: isSubmittingOrder ? 0.75 : 1,
                   }}
                 >
-                  {isSubmittingOrder
-                    ? 'جاري إرسال الطلب...'
-                    : `تأكيد وإرسال الطلب (${formatNumber(finalTotal)} ${currency})`}
+                  <span>
+                    {isSubmittingOrder
+                      ? 'جاري إرسال الطلب...'
+                      : unlistedAreaSelected
+                      ? `إكمال الطلب والتواصل مع الكاشير (${fmtMoney(finalTotal)})`
+                      : `تأكيد وإرسال الطلب (${fmtMoney(finalTotal)})`}
+                  </span>
                 </button>
               </form>
             )}

@@ -222,13 +222,64 @@ export const AddonsPage: React.FC = () => {
   };
 
   const localizedCatalog = getContextualAddonCatalog(terms.isStore);
+  const sortAddonKeysByEnabled = (
+    catalog: ReturnType<typeof getContextualAddonCatalog>,
+    stateObj: typeof addonsState
+  ): string[] => {
+    const enabledKeys: string[] = [];
+    const inactiveKeys: string[] = [];
+    catalog.forEach((a) => {
+      const keyStr = String(a.key);
+      const allowed = isAddonAllowedForPlan(a.key, resolvedPlan);
+      const isOn = allowed && Boolean((stateObj[a.key] as Record<string, any> | undefined)?.enabled);
+      if (isOn) enabledKeys.push(keyStr);
+      else inactiveKeys.push(keyStr);
+    });
+    return [...enabledKeys, ...inactiveKeys];
+  };
+
+  const [pinnedOrderKeys, setPinnedOrderKeys] = useState<string[]>(() =>
+    sortAddonKeysByEnabled(localizedCatalog, addonsState)
+  );
+  const orderScopeRef = useRef<string>(`${rid}::${terms.isStore ? '1' : '0'}`);
+
+  useEffect(() => {
+    const nextScope = `${rid}::${terms.isStore ? '1' : '0'}`;
+    if (orderScopeRef.current !== nextScope) {
+      orderScopeRef.current = nextScope;
+      setPinnedOrderKeys(sortAddonKeysByEnabled(localizedCatalog, addonsState));
+    }
+  }, [rid, terms.isStore]);
+
+  const visibleAddons = useMemo(() => {
+    const byKey = new Map<string, (typeof localizedCatalog)[number]>(
+      localizedCatalog.map((a) => [String(a.key), a])
+    );
+    const ordered: typeof localizedCatalog = [];
+    const seen = new Set<string>();
+    pinnedOrderKeys.forEach((k) => {
+      const item = byKey.get(k);
+      if (item && !seen.has(String(item.key))) {
+        seen.add(String(item.key));
+        ordered.push(item);
+      }
+    });
+    localizedCatalog.forEach((a) => {
+      const keyStr = String(a.key);
+      if (!seen.has(keyStr)) {
+        seen.add(keyStr);
+        ordered.push(a);
+      }
+    });
+    return ordered;
+  }, [localizedCatalog, pinnedOrderKeys]);
+
   const allowedAddonsCount = localizedCatalog.filter((a) => isAddonAllowedForPlan(a.key, resolvedPlan)).length;
   const enabledCount = localizedCatalog.filter(
     (a) =>
       isAddonAllowedForPlan(a.key, resolvedPlan) &&
       Boolean((addonsState[a.key] as Record<string, any> | undefined)?.enabled)
   ).length;
-  const visibleAddons = localizedCatalog;
   const addonsLimitText = `${enabledCount}/${allowedAddonsCount}`;
 
   const updateDraft = (updater: (prev: Record<string, any>) => Record<string, any>) => {
